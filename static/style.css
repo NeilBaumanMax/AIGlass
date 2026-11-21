@@ -1,0 +1,11 @@
+:root{color-scheme:dark;font:16px/1.55 "Microsoft YaHei UI",sans-serif;color:#ecf5f0;background:#101816}
+*{box-sizing:border-box}body{margin:0}main{max-width:1380px;margin:auto;padding:24px clamp(16px,3vw,44px)}
+header,.controls,form{display:flex;align-items:center;gap:12px;flex-wrap:wrap}header{justify-content:space-between;border-bottom:1px solid #34423c;padding-bottom:15px}
+h1,h2,p{margin:0}h1{font-size:32px}small{font-size:17px;font-weight:400;color:#a3b8ac;margin-left:8px}
+h2{font-size:17px;margin-bottom:12px}.controls{margin:20px 0}.views,.logs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.frame{aspect-ratio:16/9;background:#080d0b;border:1px solid #35443b;border-radius:8px;display:grid;place-items:center;overflow:hidden}
+canvas,.frame img{max-width:100%;max-height:100%;object-fit:contain}.logs section{background:#19231f;border:1px solid #35453d;border-radius:8px;padding:18px}
+button,select,input:not([type=checkbox]){background:#25362e;color:inherit;font:inherit;border:1px solid #506459;border-radius:6px;padding:7px 11px}button{cursor:pointer}button:disabled{opacity:.6}
+#start,form button:first-of-type{color:#10261b;background:#9ce5b5;border-color:#9ce5b5}#stats,#cloud,#wake,#board{color:#b5cabe;font-size:14px}#stats{margin:9px 0 22px}#cloud{margin-bottom:8px}
+ol{padding-left:0;list-style:none;max-height:240px;overflow:auto}li{margin:.45em 0}time{font-size:12px;color:#a5bbae;margin-right:8px}
+form input{flex:1;min-width:140px} [hidden]{display:none!important}@media(max-width:760px){.views,.logs{grid-template-columns:1fr}}

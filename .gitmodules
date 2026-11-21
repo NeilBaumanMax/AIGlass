@@ -1,0 +1,3 @@
+[submodule "vendor/walkguide"]
+	path = vendor/walkguide
+	url = https://github.com/18941602006/walkguide-vision.git

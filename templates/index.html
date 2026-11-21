@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小镜 · 眼镜控制台</title>
+<link rel="stylesheet" href="/static/style.css">
+<main>
+  <header><h1>小镜 <small>眼镜控制台</small></h1><span id="board">正在查询眼镜状态</span></header>
+  <section class="controls">
+    <label>画面来源 <select id="source"><option value="board">眼镜摄像头</option><option value="file">本地视频</option><option value="camera">电脑摄像头</option></select></label>
+    <input id="file" type="file" accept="video/*" aria-label="选择本地视频" hidden>
+    <label>场景 <select id="mode"><option value="indoor">室内走廊</option><option value="outdoor">室外通道</option></select></label>
+    <button id="start">开始分析</button><button id="stop">停止</button>
+    <label><input id="speak" type="checkbox" checked> 电脑语音播报</label>
+  </section>
+  <div class="views"><section><h2>原始画面</h2><div class="frame"><canvas id="raw"></canvas></div></section>
+  <section><h2>WalkGuide 分割</h2><div class="frame"><img id="overlay" alt="等待分割结果" hidden></div></section></div>
+  <p id="stats" role="status">等待输入</p>
+  <div class="logs"><section><h2>视觉提醒</h2><ol id="alerts" aria-live="polite"></ol></section>
+    <section><h2>千问对话</h2><p id="cloud"></p><button id="mic">开启电脑麦克风</button> <span id="wake">唤醒词：你好，小镜</span>
+    <ol id="dialog" aria-live="polite"></ol>
+    <form id="chat"><input id="question" maxlength="2000" aria-label="输入指令" placeholder="输入问题或切换室内／室外模式" required>
+      <button>发送</button><button id="look" type="button">看当前画面</button></form></section></div>
+</main>
+<video id="media" muted playsinline hidden></video>
+<script type="module" src="/static/console.js"></script>
+</html>

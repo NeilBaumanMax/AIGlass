@@ -1,0 +1,7 @@
+.venv/
+.bootstrap/
+.runtime/
+models/
+.env
+__pycache__/
+*.log
