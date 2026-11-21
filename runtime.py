@@ -137,6 +137,7 @@ class Runtime:
                     candidate, stable, count = None, "", 0
                 last, previous_at = (seq, mode), when
             started = time.monotonic()
+            alert_to_say = ""
             try:
                 vision = vision or Vision()
                 overlay, event = vision.analyze(image, mode)
@@ -155,7 +156,9 @@ class Runtime:
                         stable = event
                         if event:
                             self.emit("alert", event)
-                            self.on_alert(event)
+                            alert_to_say = event
+                if alert_to_say:
+                    self.on_alert(alert_to_say)
             except Exception:
                 logging.exception("Video inference failed")
                 with self.lock:
