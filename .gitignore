@@ -3,5 +3,7 @@
 .runtime/
 models/
 .env
+.tools/
+.local/
 __pycache__/
 *.log

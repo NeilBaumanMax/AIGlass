@@ -1,0 +1,11 @@
+#!/bin/sh
+# Use the onboard antenna. Credentials are in /etc/wpa_supplicant.conf.
+case "$1" in
+    start)
+        test -d /sys/class/gpio/gpio123 || echo 123 > /sys/class/gpio/export
+        echo out > /sys/class/gpio/gpio123/direction
+        echo 1 > /sys/class/gpio/gpio123/value
+        pidof wpa_supplicant >/dev/null || wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant.conf
+        udhcpc -i wlan0 -b -p /var/run/aiglass-wifi.pid
+        ;;
+esac
