@@ -34,6 +34,8 @@ def main():
     try:
         wait_for(lambda: runtime.engine_state != 'loading', 90)
         assert runtime.engine_state == 'ready', runtime.error
+        assert runtime.snapshot()['frame'] is None and not runtime.snapshot()['video_online']
+        assert runtime.current_frame() is None and not runtime.snapshot()['events']
         for mode in ('indoor', 'outdoor'):
             runtime.set_mode(mode)
             for size in ((640, 480), (960, 540), (540, 960)):

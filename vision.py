@@ -20,6 +20,7 @@ class Vision:
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.models = {}
+        self.warmed = False
 
     def prepare(self):
         from transformers import SegformerForSemanticSegmentation
@@ -28,6 +29,16 @@ class Vision:
                 self.models[mode] = SegformerForSemanticSegmentation.from_pretrained(
                     UPSTREAM / f"model-{mode}", local_files_only=True
                 ).to(self.device).eval()
+        if self.device.type == "cuda" and not self.warmed:
+            from PIL import Image
+
+            # Match upstream startup warmup. These frames are never published
+            # to Runtime, the dashboard, Qwen, or the alert callback.
+            for size in ((960, 540), (540, 960)):
+                for mode in ("outdoor", "indoor"):
+                    self.analyze(Image.new("RGB", size), mode)
+            self.analysis = None
+            self.warmed = True
 
     def analyze(self, image, mode):
         from live_overlay import indoor_input, indoor_regions, render_regions
