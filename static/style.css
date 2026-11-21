@@ -1,4 +1,5 @@
 :root{color-scheme:dark;font:16px/1.55 "Microsoft YaHei UI",sans-serif;color:#ecf5f0;background:#101816}
+#status{margin:20px 0;color:#b5cabe}#voice{color:#b5cabe}
 *{box-sizing:border-box}body{margin:0}main{max-width:1380px;margin:auto;padding:24px clamp(16px,3vw,44px)}
 header,.controls,form{display:flex;align-items:center;gap:12px;flex-wrap:wrap}header{justify-content:space-between;border-bottom:1px solid #34423c;padding-bottom:15px}
 h1,h2,p{margin:0}h1{font-size:32px}small{font-size:17px;font-weight:400;color:#a3b8ac;margin-left:8px}
