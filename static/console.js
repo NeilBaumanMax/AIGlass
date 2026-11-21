@@ -34,7 +34,7 @@ async function refresh() {
     const audio = state.audio;
     el('voice').textContent = (audio?.online ? '眼镜音频在线' : '眼镜音频离线') + ' · ' +
       (audio?.microphone ? '麦克风 ' + audio.mic_dbfs + ' dBFS' : '未收到麦克风数据') + ' · ' +
-      (audio?.awake ? '已唤醒' : '等待唤醒：你好，小镜') + ' · ' +
+      (audio?.awake ? '已唤醒' + (audio.idle_remaining == null ? '' : ' · ' + audio.idle_remaining + ' 秒后退出') : '等待唤醒：你好，小镜') + ' · ' +
       (audio?.playing ? '正在播放' : audio?.busy ? '千问正在回答' : '等待指令') +
       (state.qwen ? '' : ' · 百炼密钥未配置');
     showEvents('alerts', state.events.filter(event => event.kind !== 'dialog'));

@@ -13,6 +13,7 @@ import uuid
 import qwen
 
 ROOT = Path(__file__).resolve().parent
+IDLE_SECONDS = 8
 WAKE = re.compile(r"你好[小晓筱][镜境静靖径]")
 LOOK = re.compile(r"^(?:请帮我|帮我|请|麻烦你)?(?:看看|看一下|看一看|看当前画面|描述(?:一下)?(?:当前|眼前的)?画面)")
 MODE = re.compile(r"^(?:切换(?:到)?|打开|进入)(室内|室外)(?:模式|走廊|通道)?$")
@@ -45,6 +46,7 @@ class Speech:
         self.history = []
         self.model = self.recognizer = None
         self.utterance = bytearray()
+        self.partial = ""
         self.pending = deque(maxlen=4)
         self.active = None
         self.serial = 0
@@ -69,17 +71,34 @@ class Speech:
             self.active = None
             self.recognizer = None
             self.utterance.clear()
+            self.partial = ""
             self.runtime.emit("status", "眼镜音频客户端已连接")
             self.prompt("ready")
             return self.session
 
     def snapshot(self):
         with self.lock:
-            online = time.monotonic() - self.seen < 4
+            now = time.monotonic()
+            online = now - self.seen < 4
+            occupied = self.busy or self.playing or self.active or self.pending
+            awake = bool(online and self.awake_until and (occupied or self.awake_until > now))
             return {"online": online, "microphone": time.monotonic() - self.mic_seen < 2,
                     "mic_dbfs": self.mic_dbfs if online else None,
-                    "awake": online and self.awake_until > time.monotonic(),
+                    "awake": awake,
+                    "idle_remaining": math.ceil(max(0, self.awake_until - now)) if awake and not occupied else None,
                     "busy": online and self.busy, "playing": online and self.playing}
+
+    def expire_dialog(self, now):
+        if (self.awake_until and now >= self.awake_until and
+                not (self.busy or self.playing or self.active or self.pending)):
+            self.awake_until = 0
+            self.history.clear()
+            self.recognizer = None
+            self.utterance.clear()
+            self.partial = ""
+            self.generation += 1
+            self.runtime.emit("dialog", "8 秒无新指令，对话结束，等待唤醒")
+            self.prompt("sleep")
 
     def prompt(self, name, urgent=False):
         self.enqueue(PROMPTS[name], self.prompts.get(name, b""), urgent)
@@ -117,9 +136,10 @@ class Speech:
                 self.runtime.emit("status", ("播放失败 " + error) if error else "已播放 · " + self.active["text"])
                 self.active = None
                 if self.awake_until:
-                    self.awake_until = now + 20
+                    self.awake_until = now + IDLE_SECONDS
             if self.active and self.active["expires"] < now:
                 self.active = None
+            self.expire_dialog(now)
             while self.active is None and self.pending:
                 item = self.pending.popleft()
                 if item["expires"] >= now:
@@ -140,27 +160,32 @@ class Speech:
             pcm = audioop.bias(pcm, 2, -audioop.avg(pcm, 2))
             rms = audioop.rms(pcm, 2)
             self.mic_dbfs = max(-90, round(20 * math.log10(rms / 32768))) if rms else -90
+            self.expire_dialog(now)
             if muted or self.playing or self.active or self.busy:
                 self.recognizer = None
                 self.utterance.clear()
+                self.partial = ""
                 return
             if self.model is None:
                 self.model = Model(str(ROOT / "models/vosk-model-small-cn-0.22"))
             if self.recognizer is None or gap:
                 self.recognizer = KaldiRecognizer(self.model, 16000)
                 self.utterance.clear()
-            if self.awake_until and now > self.awake_until:
-                self.awake_until = 0
-                self.history.clear()
-                self.runtime.emit("dialog", "对话超时，等待唤醒")
+                self.partial = ""
             self.utterance.extend(pcm)
             complete = self.recognizer.AcceptWaveform(pcm)
+            if not complete and self.awake_until:
+                partial = json.loads(self.recognizer.PartialResult()).get("partial", "")
+                if partial and partial != self.partial:
+                    self.awake_until = time.monotonic() + IDLE_SECONDS
+                self.partial = partial
             if complete or len(self.utterance) > 32000 * 12:
                 result = self.recognizer.Result() if complete else self.recognizer.FinalResult()
                 text = json.loads(result).get("text", "").replace(" ", "")
                 audio = bytes(self.utterance)
                 self.utterance.clear()
                 self.recognizer = None
+                self.partial = ""
                 if text:
                     self.handle(text, audio)
 
@@ -168,7 +193,7 @@ class Speech:
         with self.lock:
             match = WAKE.search(text)
             if match:
-                self.awake_until = time.monotonic() + 20
+                self.awake_until = time.monotonic() + IDLE_SECONDS
                 self.runtime.emit("dialog", "唤醒词已识别 · " + text)
                 text = text[match.end():].strip("，。！, .!")
                 if not text:
@@ -176,7 +201,7 @@ class Speech:
                     return
             elif time.monotonic() > self.awake_until:
                 return
-            self.awake_until = time.monotonic() + 20
+            self.awake_until = time.monotonic() + IDLE_SECONDS
             self.runtime.emit("dialog", "你 · " + text)
             if text in {"结束对话", "退出对话"}:
                 self.awake_until = 0
@@ -212,7 +237,7 @@ class Speech:
                 self.history = self.history[-8:]
                 self.runtime.emit("dialog", "小镜 · " + (answer or "语音回复"))
                 self.enqueue(answer or "语音回复", wav)
-                self.awake_until = time.monotonic() + 20
+                self.awake_until = time.monotonic() + IDLE_SECONDS
         except Exception as exc:
             logging.warning("Qwen request failed (%s)", type(exc).__name__)
             with self.lock:

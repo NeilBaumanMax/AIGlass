@@ -1,6 +1,6 @@
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from app import create_app
 from runtime import Runtime
@@ -82,6 +82,54 @@ class SpeechTests(unittest.TestCase):
         self.assertFalse(self.speech.pending)
         self.assertEqual(self.speech.active["text"], "前方有障碍")
         self.assertFalse(self.speech.busy)
+
+    def test_eight_second_idle_timeout_starts_after_playback(self):
+        self.speech.seen = 100
+        with patch("speech.time.monotonic", return_value=100):
+            self.speech.handle("你好小镜")
+            wake = self.speech.poll(self.session, False, None)
+        for now in (104, 108):
+            with patch("speech.time.monotonic", return_value=now):
+                self.speech.poll(self.session, True, None)
+                self.assertTrue(self.speech.snapshot()["awake"])
+                self.assertIsNone(self.speech.snapshot()["idle_remaining"])
+        with patch("speech.time.monotonic", return_value=109):
+            self.speech.poll(self.session, False, wake["id"])
+            self.assertEqual(self.speech.snapshot()["idle_remaining"], 8)
+        with patch("speech.time.monotonic", return_value=113):
+            self.assertIsNone(self.speech.poll(self.session, False, None))
+            self.assertTrue(self.speech.snapshot()["awake"])
+        with patch("speech.time.monotonic", return_value=117):
+            timeout = self.speech.poll(self.session, False, None)
+            self.assertEqual(timeout["text"], "对话结束")
+            self.assertFalse(self.speech.snapshot()["awake"])
+            with patch("qwen.ask") as ask:
+                self.speech.handle("介绍一下你自己")
+                ask.assert_not_called()
+
+    def test_waiting_for_cloud_does_not_expire_dialog(self):
+        self.speech.seen = 100
+        self.speech.awake_until = 90
+        self.speech.busy = True
+        with patch("speech.time.monotonic", return_value=100):
+            self.assertIsNone(self.speech.poll(self.session, False, None))
+            self.assertTrue(self.speech.snapshot()["awake"])
+        self.assertEqual(self.speech.awake_until, 90)
+
+    def test_new_partial_speech_extends_wait_but_stale_partial_does_not(self):
+        self.speech.seen = self.speech.mic_seen = 100
+        self.speech.seq = 0
+        self.speech.awake_until = 101
+        self.speech.model = object()
+        self.speech.recognizer = Mock()
+        self.speech.recognizer.AcceptWaveform.return_value = False
+        self.speech.recognizer.PartialResult.return_value = '{"partial":"介绍 一下"}'
+        with patch("speech.time.monotonic", return_value=100):
+            self.speech.ingest(self.session, 1, bytes(6400))
+            self.assertEqual(self.speech.awake_until, 108)
+        with patch("speech.time.monotonic", return_value=101):
+            self.speech.ingest(self.session, 2, bytes(6400))
+            self.assertEqual(self.speech.awake_until, 108)
 
 
 if __name__ == "__main__":
