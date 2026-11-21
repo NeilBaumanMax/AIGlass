@@ -30,6 +30,8 @@
 
 客户端使用设备原有 Python 3.11、arecord 和 aplay。`S98aiglass` 开机启动，断网后自动重新握手；诊断日志为 `/tmp/aiglass-client.log`，轮转上限约 256 KB。ADC 为 SingadcL，ALC 左声道 12，数字回环 Mode2 提供参考声道。USB 用于部署和供电，音频实际走 Wi-Fi；拔掉唯一供电线会关机，脱离电脑 USB 需另接稳定电源。
 
+针对 Windows 热点存在“已关联但 ARP 解析失败”的情况，部署脚本会核对本机服务网卡的 MAC；仅当板子关联的热点 BSSID 与它一致时，固定该服务地址的邻居记录。热点变化时移除本程序的旧记录。连续 3 次网络失败且确认为关联/ARP 故障时，自动请求重新关联，间隔至少 30 秒；HTTP 会话错误、认证错误或后端停止但邻居正常时不会重置 Wi-Fi。
+
 Windows 首次需要允许热点网段访问 TCP 7860。在管理员 PowerShell 运行：
 
 ```powershell

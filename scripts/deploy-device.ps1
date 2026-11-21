@@ -19,7 +19,16 @@ function Invoke-Adb {
     & $adb -s $Serial @args
     if ($LASTEXITCODE -ne 0) { throw "ADB operation failed." }
 }
-$config = @{server = $Server.TrimEnd('/'); token = (Get-Content .local/device-token -Raw).Trim()} | ConvertTo-Json -Compress
+$settings = @{server = $Server.TrimEnd('/'); token = (Get-Content .local/device-token -Raw).Trim()}
+# Only record a MAC verified against an interface on this PC. The board also
+# requires the associated hotspot BSSID to match before installing the entry.
+$serverAdapter = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | Where-Object {
+    $_.GetIPProperties().UnicastAddresses.Address.IPAddressToString -contains $serverUri.Host
+} | Select-Object -First 1
+if ($serverAdapter) {
+    $settings.server_mac = [BitConverter]::ToString($serverAdapter.GetPhysicalAddress().GetAddressBytes()).Replace('-', ':').ToLowerInvariant()
+}
+$config = $settings | ConvertTo-Json -Compress
 [IO.File]::WriteAllText((Join-Path (Get-Location) '.local/device-config.json'), $config, [Text.UTF8Encoding]::new($false))
 Invoke-Adb shell 'if test -x /etc/init.d/S98aiglass; then /etc/init.d/S98aiglass stop; fi'
 Invoke-Adb shell 'mkdir -p /userdata/aiglass'
