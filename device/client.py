@@ -3,6 +3,8 @@ import argparse
 import audioop
 import base64
 import json
+import io
+import platform
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -12,6 +14,7 @@ import subprocess
 import threading
 import time
 import urllib.request
+import wave
 
 
 class Client:
@@ -47,8 +50,7 @@ class Client:
                 sequence += 1
                 if sequence <= 10:
                     continue
-                mono = audioop.tomono(block, 2, 1, 0)
-                item = (sequence, mono, self.muted.is_set(), time.monotonic())
+                item = (sequence, block, self.muted.is_set(), time.monotonic())
                 try:
                     self.audio.put_nowait(item)
                 except queue.Full:
@@ -73,6 +75,7 @@ class Client:
                 self.request("/device/audio", data, {
                     "Content-Type": "application/octet-stream", "X-Session": self.session,
                     "X-Sequence": str(seq), "X-Muted": "1" if muted or self.muted.is_set() else "0",
+                    "X-Audio-Format": "mic-reference",
                 })
         except Exception as exc:
             logging.warning("Audio upload failed: %s", type(exc).__name__)
@@ -108,8 +111,15 @@ class Client:
                         if not wav:
                             done, error = current, "服务器未提供语音文件"
                         else:
+                            with wave.open(io.BytesIO(wav)) as source:
+                                pcm = source.readframes(source.getnframes())
+                                if source.getnchannels() == 2:
+                                    pcm = audioop.tomono(pcm, 2, .5, .5)
+                                pcm = audioop.ratecv(pcm, 2, 1, source.getframerate(), 16000, None)[0]
                             path = Path("/tmp/aiglass-play.wav")
-                            path.write_bytes(wav)
+                            with wave.open(str(path), 'wb') as output:
+                                output.setparams((1, 2, 16000, 0, 'NONE', 'NONE'))
+                                output.writeframes(pcm)
                             self.player = subprocess.Popen(["aplay", "-q", "-D", "plughw:0,0", str(path)])
                             logging.info("Playing message %s", current)
                 if self.player or time.monotonic() < mute_until:
@@ -122,7 +132,12 @@ class Client:
             self.stop.set()
 
     def run(self):
-        self.session = self.request("/device/session", b"")["session"]
+        link = subprocess.run(['iw', 'dev', 'wlan0', 'link'], capture_output=True, text=True).stdout
+        ssid = next((line.split(':', 1)[1].strip() for line in link.splitlines() if 'SSID:' in line), '')
+        body = {'os': 'Buildroot Linux ' + platform.release(), 'hostname': platform.node(),
+                'ssid': ssid, 'audio_mode': 'mic-reference'}
+        self.session = self.request("/device/session", json.dumps(body).encode(),
+                                    {'Content-Type': 'application/json'})["session"]
         # Apply after association: the Wi-Fi interface may not exist at boot.
         # Continuous microphone traffic needs low-latency delivery.
         subprocess.run(["iw", "dev", "wlan0", "set", "power_save", "off"],
@@ -158,7 +173,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text())
     subprocess.run(["amixer", "cset", "name=ADC Mode", "SingadcL"], check=True, stdout=subprocess.DEVNULL)
-    subprocess.run(["amixer", "cset", "name=ADC ALC Left Volume", "6"], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["amixer", "cset", "name=I2STDM Digital Loopback Mode", "Mode2"], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["amixer", "cset", "name=ADC ALC Left Volume", "12"], check=True, stdout=subprocess.DEVNULL)
     subprocess.run(["amixer", "cset", "name=ADC MICBIAS Voltage", "4"], check=True, stdout=subprocess.DEVNULL)
     subprocess.run(["amixer", "cset", "name=ADC HPF Cut-off", "Off"], check=True, stdout=subprocess.DEVNULL)
     subprocess.run(["amixer", "cset", "name=DAC LINEOUT Volume", "23"], check=True, stdout=subprocess.DEVNULL)

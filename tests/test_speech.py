@@ -17,7 +17,7 @@ class SpeechTests(unittest.TestCase):
     def test_sleeping_ignores_commands_and_wake_changes_mode(self):
         self.speech.handle("切换室外模式")
         self.assertEqual(self.runtime.mode, "indoor")
-        self.speech.handle("你好小静")
+        self.speech.handle("嗨，Edith")
         self.speech.handle("切换室外模式")
         self.assertEqual(self.runtime.mode, "outdoor")
         self.assertTrue(self.speech.snapshot()["awake"])
@@ -40,7 +40,7 @@ class SpeechTests(unittest.TestCase):
             self.speech.poll(old, False, None)
 
     def test_stale_frame_not_sent_to_qwen(self):
-        self.speech.handle("你好小镜")
+        self.speech.handle("嗨，Edith")
         with patch("qwen.ask") as ask:
             self.speech.handle("看看当前画面")
             ask.assert_not_called()
@@ -86,7 +86,7 @@ class SpeechTests(unittest.TestCase):
     def test_eight_second_idle_timeout_starts_after_playback(self):
         self.speech.seen = 100
         with patch("speech.time.monotonic", return_value=100):
-            self.speech.handle("你好小镜")
+            self.speech.handle("嗨，Edith")
             wake = self.speech.poll(self.session, False, None)
         for now in (104, 108):
             with patch("speech.time.monotonic", return_value=now):
@@ -131,13 +131,11 @@ class SpeechTests(unittest.TestCase):
             self.speech.ingest(self.session, 2, bytes(6400))
             self.assertEqual(self.speech.awake_until, 108)
 
-    def test_wake_uses_two_partial_matches_without_waiting_for_silence(self):
+    def test_dedicated_keyword_detector_wakes_without_asr_transcript(self):
         self.speech.seen = self.speech.mic_seen = 100
         self.speech.seq = 0
-        self.speech.model = object()
-        self.speech.recognizer = Mock()
-        self.speech.recognizer.AcceptWaveform.return_value = False
-        self.speech.recognizer.PartialResult.return_value = '{"partial":"你好 小景"}'
+        self.speech.wake_detector = Mock()
+        self.speech.wake_detector.accept.side_effect = [False, True]
         with patch("speech.time.monotonic", return_value=100):
             self.speech.ingest(self.session, 1, bytes(6400))
             self.assertFalse(self.speech.snapshot()["awake"])
@@ -146,6 +144,28 @@ class SpeechTests(unittest.TestCase):
             self.assertTrue(self.speech.snapshot()["awake"])
             self.assertEqual(self.speech.pending[-1]["text"], "我在，请说")
             self.assertIsNone(self.speech.recognizer)
+
+    def test_duplex_speech_interrupts_playback_and_invalidates_pending_answer(self):
+        self.speech.seen = self.speech.mic_seen = 100
+        self.speech.seq = 0
+        self.speech.awake_until = 108
+        self.speech.busy = self.speech.playing = True
+        self.speech.active = {'id': 99, 'text': 'old answer'}
+        self.speech.aec = Mock()
+        self.speech.aec.process.return_value = b'\x90\x01\x70\xfe' * 1600
+        self.speech.model = object()
+        self.speech.recognizer = Mock()
+        self.speech.recognizer.AcceptWaveform.return_value = False
+        self.speech.recognizer.PartialResult.return_value = '{"partial":"换个 话题"}'
+        generation = self.speech.generation
+        with patch('speech.time.monotonic', return_value=100):
+            self.speech.ingest(self.session, 1, bytes(12800), True, True)
+            self.assertIsNotNone(self.speech.active)
+        with patch('speech.time.monotonic', return_value=100.2):
+            self.speech.ingest(self.session, 2, bytes(12800), True, True)
+            self.assertIsNone(self.speech.active)
+            self.assertFalse(self.speech.busy)
+            self.assertGreater(self.speech.generation, generation)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ from pathlib import Path
 import secrets
 import hmac
 import logging
+import mimetypes
 
 from flask import Flask, jsonify, render_template, request
 
@@ -12,6 +13,8 @@ from runtime import Runtime
 
 
 def create_app(runtime, speech=None, token=""):
+    mimetypes.init()
+    mimetypes.add_type('image/svg+xml', '.svg')
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
 
@@ -35,9 +38,22 @@ def create_app(runtime, speech=None, token=""):
             if speech is None:
                 return "音频服务未启动", 503
 
+    @app.post("/api/dialog/clear")
+    def clear_dialog():
+        origin = request.headers.get("Origin")
+        if (not request.is_json or request.headers.get("Sec-Fetch-Site") == "cross-site" or
+                (origin and origin != request.host_url.rstrip('/'))):
+            return "仅允许本机页面清空展示记录", 403
+        runtime.clear_dialog()
+        return jsonify(ok=True)
+
     @app.post("/device/session")
     def session():
-        return jsonify(session=speech.connect())
+        body = request.get_json(silent=True) or {}
+        info = {k: str(body.get(k, ""))[:100] for k in ("os", "ssid", "hostname", "audio_mode")}
+        info["ip"] = request.remote_addr
+        runtime.configure_glasses(str(ipaddress.ip_address(request.remote_addr)))
+        return jsonify(session=speech.connect(info))
 
     @app.post("/device/audio")
     def audio():
@@ -47,7 +63,8 @@ def create_app(runtime, speech=None, token=""):
             if seq < 0 or not data or len(data) % 2 or len(data) > 16000:
                 return "无效 PCM16 片段", 400
             speech.ingest(request.headers.get("X-Session"), seq, data,
-                          request.headers.get("X-Muted") == "1")
+                          request.headers.get("X-Muted") == "1",
+                          request.headers.get("X-Audio-Format") == "mic-reference")
             return "", 204
         except (ValueError, KeyError):
             return "音频会话或序号错误，请重新连接", 409
@@ -92,7 +109,7 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=7860)
     args = parser.parse_args()
     address = f"rtsp://{args.glasses}/live/0" if args.glasses else args.test_video
-    runtime = Runtime(address, args.mode)
+    runtime = Runtime(address, args.mode, root / '.local/events.sqlite3')
     speech = Speech(runtime)
     token_file = root / ".local" / "device-token"
     token_file.parent.mkdir(exist_ok=True)

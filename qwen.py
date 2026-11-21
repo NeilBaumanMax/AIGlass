@@ -33,7 +33,7 @@ def ask(text, history, frame=None, pcm=None):
             "url": "data:image/jpeg;base64," + base64.b64encode(frame).decode(),
         }})
     messages = [{"role": "system", "content":
-        "你是视障眼镜助手小镜，根据用户的语音问题用简短中文回答，通常不超过80字。"
+        "你是视障眼镜助手Edith，根据用户的语音问题用简短中文回答，通常不超过80字。"
         "当前原型支持语音对话、切换室内或室外视觉模式，以及用户明确要求看画面时描述所附图像。"
         "尚不支持GPS路线导航或可靠测距，不要宣称具备这些功能。"
         "无图时只能说明本轮未收到画面，不能声称看到环境，也不要说自己完全不能看图。"

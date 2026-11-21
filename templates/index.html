@@ -1,21 +1,45 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>小镜 · 眼镜状态</title>
-<link rel="stylesheet" href="/static/style.css">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#04151e"><title>Edith · AI 智能眼镜视觉控制台</title><link rel="stylesheet" href="/static/style.css"></head>
+<body><div class="landscape" aria-hidden="true"></div>
+<header class="topbar">
+  <a class="brand" href="#live" aria-label="Edith 首页"><span class="icon logo" data-icon="circles-relation"></span><strong>Edith</strong></a><span class="brand-sub">AI 智能眼镜 · 视觉控制台</span>
+  <nav aria-label="页面导航"><a class="selected" href="#live"><span class="icon" data-icon="home"></span>实时视觉</a><a href="#device"><span class="icon" data-icon="devices"></span>设备信息</a><a href="#events"><span class="icon" data-icon="list-details"></span>数据记录</a><a href="#connection-details"><span class="icon" data-icon="settings"></span>连接配置</a></nav>
+  <div class="top-meta"><span id="connection" class="connection">连接后端…</span><time id="clock"></time></div>
+</header>
 <main>
-  <header><h1>小镜 <small>眼镜状态</small></h1><span id="connection">正在连接后端</span></header>
-  <p id="status" role="status">等待设备</p>
-  <div class="views">
-    <section><h2>原始画面</h2><div class="frame"><img id="raw" alt="等待眼镜画面" hidden></div></section>
-    <section><h2>WalkGuide 分割</h2><div class="frame"><img id="overlay" alt="等待处理结果" hidden></div></section>
+  <section class="hero" id="live"><div class="intro"><h1>让视觉更智能，让世界<span>更清晰。</span></h1><p>Edith 智能眼镜实时视觉控制台 · 第一视角感知、理解与智能响应</p></div>
+    <div class="status-strip glass" aria-label="系统实时状态">
+      <article><span class="icon" data-icon="eyeglass"></span><div><strong id="board-state">确认设备中</strong><small id="board-detail">等待设备心跳</small></div></article>
+      <article><span class="icon" data-icon="microphone"></span><div><strong id="wake-state">等待设备</strong><small id="wake-detail">嗨，Edith</small></div></article>
+      <article><span class="icon" data-icon="sparkles"></span><div><strong id="ai-state">正在确认</strong><small id="ai-detail">千问 · 北京</small></div></article>
+      <article><span class="icon" data-icon="home"></span><div><strong id="mode">室内模式</strong><small>语音切换场景</small></div></article>
+      <article><span class="icon" data-icon="cpu"></span><div><strong id="vision-state">加载模型中</strong><small id="vision-detail">WalkGuide</small></div></article>
+    </div>
+  </section>
+  <div class="workspace">
+    <section class="glass camera-panel" aria-labelledby="camera-title">
+      <div class="panel-heading"><h2 id="camera-title"><span class="icon" data-icon="video"></span>实时画面 <span class="heading-sub">· 眼前的世界</span></h2><span class="pill" id="video-badge">等待视频</span></div>
+      <div class="frame raw-frame"><img id="raw" alt="眼镜摄像头实时画面" hidden><div class="empty-frame" id="raw-empty"><span class="icon" data-icon="camera-off"></span><strong>等待摄像头连接</strong><p>IMX415 接入眼镜后，在这里看到真实的第一视角</p><span class="empty-tag">CSI CAMERA · 等待视频流</span></div><div class="feed-caption"><span><span class="icon" data-icon="eyeglass"></span><span id="frame-size">第一视角 · 尚无画面</span></span><span id="stats">等待第一帧</span></div></div><p id="video-note" class="note">正在等待摄像头视频流。</p>
+    </section>
+    <section class="glass analysis-panel" aria-labelledby="analysis-title">
+      <div class="panel-heading"><h2 id="analysis-title"><span class="icon" data-icon="stack-2"></span>语义分割 / 路径分析</h2></div>
+      <div class="frame overlay-frame"><img id="overlay" alt="WalkGuide 实时分割结果" hidden><div class="empty-frame" id="overlay-empty"><span class="icon" data-icon="stack-2"></span><strong>等待视觉分析</strong><p>画面接入后自动分析</p></div></div>
+      <div class="legend"><span><i class="green"></i>候选通道</span><span><i class="orange"></i>障碍</span><span><i class="blue"></i>台阶</span></div>
+      <div class="analysis-summary"><h3><span class="icon" data-icon="activity"></span>AI 视觉分析</h3><p id="analysis-message">尚无画面，等待分析</p><dl class="region-metrics"><div><dt>候选通道</dt><dd id="floor-ratio">—</dd></div><div><dt>障碍区域</dt><dd id="obstacle-ratio">—</dd></div><div><dt>台阶区域</dt><dd id="stairs-ratio">—</dd></div></dl><p class="small-note">显示分割区域占比，不代表距离或通行保证。</p></div>
+    </section>
+    <section class="glass chat-panel" aria-labelledby="chat-title">
+      <div class="panel-heading"><h2 id="chat-title"><span class="icon" data-icon="sparkles"></span>与 Edith 的对话</h2><button id="clear-dialog" class="quiet-button" type="button" title="清空展示记录，不改变正在进行的语音对话"><span class="icon" data-icon="trash"></span><span id="clear-label">清空记录</span></button></div>
+      <div class="assistant-presence" id="presence"><span class="avatar"><span class="icon" data-icon="circles-relation"></span></span><div><strong id="voice-title">等待唤醒</strong><p id="voice">对眼镜说「嗨，Edith」</p></div><span class="phase-dot"></span></div>
+      <div class="chat-scroll" id="chat-scroll"><div class="chat-empty" id="chat-empty"><span class="icon" data-icon="sparkles"></span><h3>Edith，在听见你的时候回应</h3><p>对眼镜说「嗨，Edith」<br>然后试试「介绍一下你自己」<br>对话内容会同步显示在这里</p></div><ol id="dialog" aria-live="polite" aria-label="语音对话记录"></ol></div>
+      <div class="chat-footer"><span class="icon" data-icon="microphone"></span><div><span id="mic-label">等待麦克风数据</span><small id="duplex-label">语音链路待连接</small></div><span class="voice-only">通过眼镜对话</span></div><p id="clear-feedback" class="sr-only" role="status"></p>
+    </section>
   </div>
-  <p id="stats"></p>
-  <div class="logs">
-    <section><h2>视觉提醒与设备事件</h2><ol id="alerts" aria-live="polite"></ol></section>
-    <section><h2>AI 对话</h2><p id="voice"></p><ol id="dialog" aria-live="polite"></ol></section>
+  <div class="bottom-grid">
+    <section class="glass device-panel" id="device" aria-labelledby="device-title"><div class="panel-heading"><h2 id="device-title"><span class="icon" data-icon="eyeglass"></span>设备信息</h2><span id="device-health" class="pill">等待连接</span></div><div class="device-overview"><span class="device-symbol icon" data-icon="cpu"></span><div><h3>Pico Zero</h3><p>Edith 智能眼镜 · RV1106G3</p></div></div><dl class="device-facts"><div><dt>系统版本</dt><dd id="os-info">等待设备信息</dd></div><div><dt>设备 IP</dt><dd id="board-ip">—</dd></div><div><dt>无线网络</dt><dd id="ssid">—</dd></div><div><dt>最近心跳</dt><dd id="heartbeat">—</dd></div></dl></section>
+    <section class="glass recent-panel" aria-labelledby="recent-title"><div class="panel-heading"><h2 id="recent-title"><span class="icon" data-icon="focus-2"></span>最近视觉提醒</h2><span class="small-label">WalkGuide</span></div><ol id="recent-alerts"></ol><div id="recent-empty" class="recent-empty"><span class="icon" data-icon="focus-2"></span><strong>尚无视觉提醒</strong><p>检测产生的实际提醒将在这里保留</p></div></section>
+    <section class="glass events-panel" id="events" aria-labelledby="events-title"><div class="panel-heading"><h2 id="events-title"><span class="icon" data-icon="activity"></span>事件动态</h2><span class="small-label" id="events-live">实时同步</span></div><ol id="alerts" aria-live="polite"></ol><p id="events-empty" class="note">暂无设备事件</p></section>
   </div>
-</main>
-<script src="/static/console.js"></script>
-</html>
+  <details id="connection-details" class="connection-details"><summary><span class="icon" data-icon="settings"></span>连接与运行配置<span>只读</span></summary><div class="config-grid"><p><span>摄像头来源</span><code id="source-address">等待设备</code></p><p><span>视觉处理</span><strong>WalkGuide · 电脑本地推理</strong></p><p><span>语音交互</span><strong>嗨，Edith · 8 秒无指令退出</strong></p><p><span>AI 服务</span><strong>千问 · 中国内地（北京）</strong></p></div></details>
+  <footer><span>EDITH <span class="footer-divider">/</span> 与世界保持连接</span><span>本地视觉处理 · 仅主动看图时发送当前帧给千问</span></footer>
+</main><script src="/static/console.js"></script></body></html>

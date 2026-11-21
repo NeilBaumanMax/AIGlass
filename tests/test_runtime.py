@@ -13,8 +13,10 @@ class RuntimeTests(unittest.TestCase):
     def test_read_only_view(self):
         client = create_app(Runtime()).test_client()
         page = client.get("/").data
-        for element in (b"<input", b"<button", b"<select", b"<video"):
+        for element in (b"<input", b"<textarea", b"<select", b"<video"):
             self.assertNotIn(element, page)
+        self.assertEqual(page.count(b'<button'), 1)
+        self.assertIn(b'id="clear-dialog"', page)
         self.assertEqual(client.post("/api/vision").status_code, 404)
         self.assertEqual(client.post("/api/chat").status_code, 404)
         self.assertFalse(client.get("/api/status").json["video_online"])
@@ -63,6 +65,14 @@ class RuntimeTests(unittest.TestCase):
         runtime.frame_time -= 5
         self.assertIsNone(runtime.snapshot()["frame"])
         self.assertIsNone(runtime.current_frame())
+
+    def test_stalled_inference_hides_old_pair_even_if_capture_is_live(self):
+        runtime = Runtime()
+        runtime.ingest(Image.new('RGB', (64, 48)))
+        runtime.pair = {'sequence': 1}
+        runtime.pair_time = time.monotonic() - 5
+        self.assertTrue(runtime.snapshot()['video_online'])
+        self.assertIsNone(runtime.snapshot()['frame'])
 
 
 if __name__ == "__main__":

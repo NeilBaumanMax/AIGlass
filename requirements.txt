@@ -1,3 +1,4 @@
 -r vendor/walkguide/requirements.txt
 transformers<5
 vosk==0.3.45
+sherpa-onnx==2.0.2
