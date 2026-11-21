@@ -21,7 +21,9 @@ def ask(text, history, frame=None, pcm=None):
     if not key:
         raise RuntimeError("百炼密钥未配置")
     content = [{"type": "text", "text": text}]
-    if pcm:
+    # Qwen3-Omni accepts text plus one non-text modality per request.
+    # A look command uses its local transcript with the requested image.
+    if pcm and frame is None:
         content.append({"type": "input_audio", "input_audio": {
             "data": "data:audio/wav;base64," + base64.b64encode(wav_bytes(pcm, 16000)).decode(),
             "format": "wav",

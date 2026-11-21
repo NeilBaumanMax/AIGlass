@@ -35,6 +35,8 @@ New-NetFirewallRule -DisplayName 'AIGlass Pico demo' -Direction Inbound -Action 
 
 网页没有录音、输入或控制入口；关闭网页不影响处理。当前单设备局域网 Demo 使用设备令牌认证上传和播放请求。
 
+Qwen3-Omni 每次只接受文字与一种其他模态组合。因此普通问题使用文字和语音，看画面请求使用本地识别的指令文字和当前图片，不同时传入图片和音频。[官方接口说明](https://help.aliyun.com/zh/model-studio/qwen-omni)
+
 ## 环境与模型
 
 本机使用项目目录内的 Python 3.11 运行环境与 CUDA PyTorch。新电脑可用以下命令安装。
