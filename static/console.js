@@ -13,6 +13,7 @@ function clearImages() {
   lastSequence = -1;
   label('frame-size', '第一视角 · 尚无画面');
   label('analysis-message', '尚无画面，等待分析');
+  label('direction', '等待方向判断');
   ['floor-ratio', 'obstacle-ratio', 'stairs-ratio'].forEach(id => label(id, '—'));
 }
 function renderDialog(events) {
@@ -76,6 +77,7 @@ function display(next) {
   label('duplex-label', audio.aec_error ? '回声处理异常' : audio.duplex ? '双向音频 · 回声消除' : '轮流说话');
   label('vision-state', next.engine_state === 'ready' ? (next.video_online ? '正在分析' : '引擎就绪') : next.engine_state === 'error' ? '模型异常' : '加载模型中');
   label('vision-detail', next.device ? next.device.toUpperCase() + ' · SegFormer-B2' : 'WalkGuide · 电脑端运行');
+  label('vision-version', next.vision_revision ? 'WalkGuide · ' + next.vision_revision.slice(0, 7) : 'WalkGuide · 电脑本地推理');
   label('mode', next.mode === 'outdoor' ? '室外模式' : '室内模式');
   const isTest = next.source !== '未配置' && !next.source.startsWith('rtsp://');
   label('video-badge', next.video_online ? (isTest ? '测试录像' : 'LIVE') : '等待摄像头', next.video_online ? 'good' : 'warning');
@@ -85,11 +87,13 @@ function display(next) {
     label('frame-size', (isTest ? '测试画面' : '第一视角') + (next.frame.width ? ` · ${next.frame.width} × ${next.frame.height}` : ''));
     const analysis = next.frame.analysis;
     label('analysis-message', analysis ? analysis.message : '正在分析当前画面');
+    label('direction', analysis?.direction_message || '等待方向判断', analysis?.direction === 'stop' ? 'warning' : '');
     for (const kind of ['floor', 'obstacle', 'stairs']) label(kind + '-ratio', analysis && analysis[kind] != null ? analysis[kind] + '%' : '—');
-    if (next.frame.sequence !== lastSequence) {
+    const frameKey = next.frame.sequence + ':' + (next.frame.mode || next.mode);
+    if (frameKey !== lastSequence) {
       el('raw').src='data:image/jpeg;base64,'+next.frame.raw;el('overlay').src='data:image/jpeg;base64,'+next.frame.overlay;
       el('raw').hidden=el('overlay').hidden=false;el('raw-empty').hidden=el('overlay-empty').hidden=true;
-      lastSequence=next.frame.sequence;
+      lastSequence=frameKey;
     }
   } else clearImages();
   label('os-info', info.os || '等待 Linux 设备信息'); label('ssid', info.ssid || '—');label('board-ip', info.ip || '—');

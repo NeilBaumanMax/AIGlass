@@ -25,8 +25,9 @@
     <section class="glass analysis-panel" aria-labelledby="analysis-title">
       <div class="panel-heading"><h2 id="analysis-title"><span class="icon" data-icon="stack-2"></span>语义分割 / 路径分析</h2></div>
       <div class="frame overlay-frame"><img id="overlay" alt="WalkGuide 实时分割结果" hidden><div class="empty-frame" id="overlay-empty"><span class="icon" data-icon="stack-2"></span><strong>等待视觉分析</strong><p>画面接入后自动分析</p></div></div>
-      <div class="legend"><span><i class="green"></i>候选通道</span><span><i class="orange"></i>障碍</span><span><i class="blue"></i>台阶</span></div>
-      <div class="analysis-summary"><h3><span class="icon" data-icon="activity"></span>AI 视觉分析</h3><p id="analysis-message">尚无画面，等待分析</p><dl class="region-metrics"><div><dt>候选通道</dt><dd id="floor-ratio">—</dd></div><div><dt>障碍区域</dt><dd id="obstacle-ratio">—</dd></div><div><dt>台阶区域</dt><dd id="stairs-ratio">—</dd></div></dl><p class="small-note">显示分割区域占比，不代表距离或通行保证。</p></div>
+      <div class="legend"><span><i class="green"></i>候选通道</span><span><i class="orange"></i>障碍</span><span><i class="blue"></i>台阶</span><span><i class="white"></i>方向线</span></div>
+      <div class="direction-status"><span>画面方向参考</span><strong id="direction">等待方向判断</strong></div>
+      <div class="analysis-summary"><h3><span class="icon" data-icon="activity"></span>AI 视觉分析</h3><p id="analysis-message">尚无画面，等待分析</p><dl class="region-metrics"><div><dt>候选通道</dt><dd id="floor-ratio">—</dd></div><div><dt>障碍区域</dt><dd id="obstacle-ratio">—</dd></div><div><dt>台阶区域</dt><dd id="stairs-ratio">—</dd></div></dl><p class="small-note">白线为像素方向参考，红色终点提示暂停确认；未测量实际距离或通行宽度。</p></div>
     </section>
     <section class="glass chat-panel" aria-labelledby="chat-title">
       <div class="panel-heading"><h2 id="chat-title"><span class="icon" data-icon="sparkles"></span>与 Edith 的对话</h2><button id="clear-dialog" class="quiet-button" type="button" title="清空展示记录，不改变正在进行的语音对话"><span class="icon" data-icon="trash"></span><span id="clear-label">清空记录</span></button></div>
@@ -40,6 +41,6 @@
     <section class="glass recent-panel" aria-labelledby="recent-title"><div class="panel-heading"><h2 id="recent-title"><span class="icon" data-icon="focus-2"></span>最近视觉提醒</h2><span class="small-label">WalkGuide</span></div><ol id="recent-alerts"></ol><div id="recent-empty" class="recent-empty"><span class="icon" data-icon="focus-2"></span><strong>尚无视觉提醒</strong><p>检测产生的实际提醒将在这里保留</p></div></section>
     <section class="glass events-panel" id="events" aria-labelledby="events-title"><div class="panel-heading"><h2 id="events-title"><span class="icon" data-icon="activity"></span>事件动态</h2><span class="small-label" id="events-live">实时同步</span></div><ol id="alerts" aria-live="polite"></ol><p id="events-empty" class="note">暂无设备事件</p></section>
   </div>
-  <details id="connection-details" class="connection-details"><summary><span class="icon" data-icon="settings"></span>连接与运行配置<span>只读</span></summary><div class="config-grid"><p><span>摄像头来源</span><code id="source-address">等待设备</code></p><p><span>视觉处理</span><strong>WalkGuide · 电脑本地推理</strong></p><p><span>语音交互</span><strong>嗨，Edith · 8 秒无指令退出</strong></p><p><span>AI 服务</span><strong>千问 · 中国内地（北京）</strong></p></div></details>
+  <details id="connection-details" class="connection-details"><summary><span class="icon" data-icon="settings"></span>连接与运行配置<span>只读</span></summary><div class="config-grid"><p><span>摄像头来源</span><code id="source-address">等待设备</code></p><p><span>视觉处理</span><strong id="vision-version">WalkGuide · 电脑本地推理</strong></p><p><span>语音交互</span><strong>嗨，Edith · 8 秒无指令退出</strong></p><p><span>AI 服务</span><strong>千问 · 中国内地（北京）</strong></p></div></details>
   <footer><span>EDITH <span class="footer-divider">/</span> 与世界保持连接</span><span>本地视觉处理 · 仅主动看图时发送当前帧给千问</span></footer>
 </main><script src="/static/console.js"></script></body></html>

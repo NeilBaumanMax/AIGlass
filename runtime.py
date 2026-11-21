@@ -8,7 +8,7 @@ import uuid
 
 from PIL import Image
 
-from vision import Vision
+from vision import Vision, WALKGUIDE_REVISION
 
 
 def jpeg(image):
@@ -96,6 +96,7 @@ class Runtime:
                 "video_online": fresh, "source": self.source or "未配置",
                 "mode": self.mode, "device": self.device, "ms": self.latency,
                 "engine_state": self.engine_state,
+                "vision_revision": WALKGUIDE_REVISION,
                 "error": self.error, "events": list(self.events),
                 "frame": self.pair if fresh and time.monotonic() - self.pair_time < 4 else None,
             }
@@ -178,7 +179,7 @@ class Runtime:
             try:
                 vision = vision or Vision()
                 overlay, event = vision.analyze(image, mode)
-                pair = {"sequence": seq, "raw": base64.b64encode(jpeg(image)).decode(),
+                pair = {"sequence": seq, "mode": mode, "raw": base64.b64encode(jpeg(image)).decode(),
                         "overlay": base64.b64encode(jpeg(overlay)).decode(),
                         "width": image.width, "height": image.height,
                         "analysis": getattr(vision, 'analysis', None)}

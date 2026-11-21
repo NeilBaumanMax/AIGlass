@@ -11,6 +11,7 @@ import time
 import uuid
 
 import qwen
+from vision import DIRECTION_MESSAGES
 
 ROOT = Path(__file__).resolve().parent
 IDLE_SECONDS = 8
@@ -28,6 +29,7 @@ PROMPTS = {
     "obstacle": "前方有障碍",
     "stairs": "前方疑似台阶",
     "unclear": "前方路面看不清",
+    **{"direction_" + key: value for key, value in DIRECTION_MESSAGES.items()},
 }
 
 
@@ -144,9 +146,15 @@ class Speech:
 
     def alert(self, text):
         name = {"前方有障碍": "obstacle", "前方疑似台阶": "stairs",
-                "前方路面看不清": "unclear"}.get(text)
+                "前方路面看不清": "unclear",
+                **{value: "direction_" + key for key, value in DIRECTION_MESSAGES.items()}}.get(text)
         if name:
             with self.lock:
+                routine = name in {"direction_straight", "direction_left", "direction_right"}
+                # Routine directions are useful while walking, but must not
+                # interrupt a conversation or queue up stale instructions.
+                if routine and (self.awake_until or self.busy or self.playing or self.active or self.pending):
+                    return
                 self.generation += 1
                 self.busy = False
                 self.prompt(name, urgent=True)

@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 from app import create_app
 from runtime import Runtime
 from speech import Speech
+from vision import DIRECTION_MESSAGES
 
 
 class SpeechTests(unittest.TestCase):
@@ -38,6 +39,22 @@ class SpeechTests(unittest.TestCase):
         self.speech.connect()
         with self.assertRaises(ValueError):
             self.speech.poll(old, False, None)
+
+    def test_direction_does_not_interrupt_dialog_but_stop_does(self):
+        self.speech.handle('嗨，Edith')
+        wake = self.speech.poll(self.session, False, None)
+        self.speech.alert(DIRECTION_MESSAGES['left'])
+        self.assertEqual(self.speech.active['id'], wake['id'])
+        self.assertFalse(self.speech.pending)
+        self.speech.alert(DIRECTION_MESSAGES['stop'])
+        stop = self.speech.poll(self.session, True, wake['id'])
+        self.assertNotEqual(stop['id'], wake['id'])
+        self.assertEqual(stop['text'], DIRECTION_MESSAGES['stop'])
+
+    def test_idle_direction_is_spoken_without_waking_dialog(self):
+        self.speech.alert(DIRECTION_MESSAGES['right'])
+        self.assertEqual(self.speech.poll(self.session, False, None)['text'], DIRECTION_MESSAGES['right'])
+        self.assertFalse(self.speech.snapshot()['awake'])
 
     def test_stale_frame_not_sent_to_qwen(self):
         self.speech.handle("嗨，Edith")
