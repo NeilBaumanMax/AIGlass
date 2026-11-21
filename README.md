@@ -1,5 +1,13 @@
 # Edith · AIGlass
 
+**当前电脑仅用于开发和联调；开发完成后，部署到另一台 Windows 11 + RTX 4090 电脑。** 新电脑独立运行后端，眼镜连接新电脑所在局域网，运行时不依赖开发机。
+
+## 在 RTX 4090 电脑上部署
+
+请按 [Windows 11 + RTX 4090 完整部署指南](docs/部署指南-Windows11-RTX4090.md) 从头安装。指南包含 Git 子模块、Python 3.11 / CUDA PyTorch、视觉与唤醒模型、消回声库、提示音、ADB、千问配置、局域网、防火墙、板端地址与令牌迁移、启动、更新及验收。
+
+目标电脑尚未实机验收。现有程序仍是开发中的局域网 Demo，摄像头实拍与完整插话稳定性仍需验证。以下为功能概览和开发机使用说明，迁移时不照搬开发机的 IP、目录或凭据。
+
 眼镜端使用 Luckfox Pico Zero RV1106G3、Buildroot Linux、IMX415-98 IR-CUT Camera、板载麦克风和外接喇叭。摄像头接 CSI，电脑通过局域网接收视频与音频。网页显示设备状态、视频、分割和对话，允许清空对话展示记录。后台处理独立于浏览器。IMX415 目前尚未到手，真实摄像头链路待验收。
 
 ## 启动电脑后端
@@ -53,6 +61,7 @@ Qwen3-Omni 每次只接受文字与一种其他模态组合。因此普通问题
 ```powershell
 git submodule update --init --recursive
 py -3.11 -m venv .venv
+.\.venv\Scripts\python -m pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu126
 .\.venv\Scripts\python -m pip install -r requirements.txt
 .\.venv\Scripts\python vendor/walkguide/setup_models.py
 ```
@@ -62,6 +71,8 @@ py -3.11 -m venv .venv
 ## 施工与验证
 
 完整目标和进度在 [施工目标](docs/施工目标.md) 与 [施工记录](docs/施工记录.md)。本地测试使用 `python -m unittest discover -s tests -v`。
+
+新电脑配置完成后先运行 `python scripts/check-env.py`，核对 CUDA、依赖、模型、消回声库和提示音是否齐全。此检查不输出密钥、不调用千问，也不修改板子；云端与硬件仍按部署指南单独验收。
 
 安装模型后运行 `python scripts/check-vision.py`，可离线检查真实模型的室内/室外、横屏/竖屏推理、方向输出及断流清除。输入为程序生成的测试图，只验证软件链路，不代表实景识别准确率；不会上传画面或替换正在运行的眼镜视频。`--snapshot .local/qa-frame.json` 可保存供隔离浏览器测试使用的结果。
 
