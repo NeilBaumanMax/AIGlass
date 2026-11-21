@@ -14,7 +14,7 @@ import qwen
 
 ROOT = Path(__file__).resolve().parent
 IDLE_SECONDS = 8
-WAKE = re.compile(r"你好[小晓筱][镜境静靖径]")
+WAKE = re.compile(r"你好[小晓筱][镜境静靖径景净敬晶精竞京]")
 LOOK = re.compile(r"^(?:请帮我|帮我|请|麻烦你)?(?:看看|看一下|看一看|看当前画面|描述(?:一下)?(?:当前|眼前的)?画面)")
 MODE = re.compile(r"^(?:切换(?:到)?|打开|进入)(室内|室外)(?:模式|走廊|通道)?$")
 PROMPTS = {
@@ -47,6 +47,7 @@ class Speech:
         self.model = self.recognizer = None
         self.utterance = bytearray()
         self.partial = ""
+        self.wake_hits = 0
         self.pending = deque(maxlen=4)
         self.active = None
         self.serial = 0
@@ -72,6 +73,7 @@ class Speech:
             self.recognizer = None
             self.utterance.clear()
             self.partial = ""
+            self.wake_hits = 0
             self.runtime.emit("status", "眼镜音频客户端已连接")
             self.prompt("ready")
             return self.session
@@ -165,6 +167,7 @@ class Speech:
                 self.recognizer = None
                 self.utterance.clear()
                 self.partial = ""
+                self.wake_hits = 0
                 return
             if self.model is None:
                 self.model = Model(str(ROOT / "models/vosk-model-small-cn-0.22"))
@@ -172,11 +175,22 @@ class Speech:
                 self.recognizer = KaldiRecognizer(self.model, 16000)
                 self.utterance.clear()
                 self.partial = ""
+                self.wake_hits = 0
             self.utterance.extend(pcm)
             complete = self.recognizer.AcceptWaveform(pcm)
-            if not complete and self.awake_until:
-                partial = json.loads(self.recognizer.PartialResult()).get("partial", "")
-                if partial and partial != self.partial:
+            if not complete:
+                partial = json.loads(self.recognizer.PartialResult()).get("partial", "").replace(" ", "")
+                match = WAKE.search(partial)
+                self.wake_hits = self.wake_hits + 1 if match and not self.awake_until else 0
+                # Confirm over two successive audio blocks instead of waiting
+                # for a silence endpoint in a noisy room.
+                if self.wake_hits >= 2:
+                    self.handle(match.group())
+                    self.recognizer = None
+                    self.utterance.clear()
+                    self.wake_hits = 0
+                    return
+                if self.awake_until and partial and partial != self.partial:
                     self.awake_until = time.monotonic() + IDLE_SECONDS
                 self.partial = partial
             if complete or len(self.utterance) > 32000 * 12:
@@ -186,6 +200,7 @@ class Speech:
                 self.utterance.clear()
                 self.recognizer = None
                 self.partial = ""
+                self.wake_hits = 0
                 if text:
                     self.handle(text, audio)
 

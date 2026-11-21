@@ -123,6 +123,10 @@ class Client:
 
     def run(self):
         self.session = self.request("/device/session", b"")["session"]
+        # Apply after association: the Wi-Fi interface may not exist at boot.
+        # Continuous microphone traffic needs low-latency delivery.
+        subprocess.run(["iw", "dev", "wlan0", "set", "power_save", "off"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         logging.info("Connected to audio server")
         workers = [threading.Thread(target=target, daemon=True)
                    for target in (self.capture, self.upload, self.playback)]
@@ -154,9 +158,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text())
     subprocess.run(["amixer", "cset", "name=ADC Mode", "SingadcL"], check=True, stdout=subprocess.DEVNULL)
-    subprocess.run(["amixer", "cset", "name=ADC ALC Left Volume", "23"], check=True, stdout=subprocess.DEVNULL)
-    subprocess.run(["amixer", "cset", "name=ADC MICBIAS Voltage", "7"], check=True, stdout=subprocess.DEVNULL)
-    subprocess.run(["amixer", "cset", "name=ADC HPF Cut-off", "On"], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["amixer", "cset", "name=ADC ALC Left Volume", "6"], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["amixer", "cset", "name=ADC MICBIAS Voltage", "4"], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["amixer", "cset", "name=ADC HPF Cut-off", "Off"], check=True, stdout=subprocess.DEVNULL)
     subprocess.run(["amixer", "cset", "name=DAC LINEOUT Volume", "23"], check=True, stdout=subprocess.DEVNULL)
     while True:
         try:

@@ -131,6 +131,22 @@ class SpeechTests(unittest.TestCase):
             self.speech.ingest(self.session, 2, bytes(6400))
             self.assertEqual(self.speech.awake_until, 108)
 
+    def test_wake_uses_two_partial_matches_without_waiting_for_silence(self):
+        self.speech.seen = self.speech.mic_seen = 100
+        self.speech.seq = 0
+        self.speech.model = object()
+        self.speech.recognizer = Mock()
+        self.speech.recognizer.AcceptWaveform.return_value = False
+        self.speech.recognizer.PartialResult.return_value = '{"partial":"你好 小景"}'
+        with patch("speech.time.monotonic", return_value=100):
+            self.speech.ingest(self.session, 1, bytes(6400))
+            self.assertFalse(self.speech.snapshot()["awake"])
+        with patch("speech.time.monotonic", return_value=100.2):
+            self.speech.ingest(self.session, 2, bytes(6400))
+            self.assertTrue(self.speech.snapshot()["awake"])
+            self.assertEqual(self.speech.pending[-1]["text"], "我在，请说")
+            self.assertIsNone(self.speech.recognizer)
+
 
 if __name__ == "__main__":
     unittest.main()
