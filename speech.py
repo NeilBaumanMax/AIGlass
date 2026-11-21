@@ -245,7 +245,7 @@ class Speech:
                     self.wake_detector.reset()
                 return
             if self.model is None:
-                self.model = Model(str(ROOT / "models/vosk-model-small-cn-0.22"))
+                self.model = self.wake_detector.model if self.wake_detector else Model(str(ROOT / "models/vosk-model-small-cn-0.22"))
             if self.recognizer is None or gap:
                 self.recognizer = KaldiRecognizer(self.model, 16000)
                 self.utterance.clear()

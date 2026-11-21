@@ -61,8 +61,9 @@ def pin_hotspot_neighbor(server, server_mac, link):
 
 class NetworkRecovery:
     """Repair a broken Wi-Fi association/ARP path, with a bounded retry rate."""
-    def __init__(self, server):
+    def __init__(self, server, server_mac=''):
         self.host = urllib.parse.urlsplit(server).hostname
+        self.server_mac = server_mac
         self.failures = 0
         self.next_attempt = 0.0
 
@@ -86,7 +87,11 @@ class NetworkRecovery:
             disconnected = link.returncode == 0 and 'Not connected' in link.stdout
             bad_neighbor = neighbor.returncode == 0 and any(
                 state in neighbor.stdout.split() for state in ('INCOMPLETE', 'FAILED'))
-            if not (disconnected or bad_neighbor):
+            reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+            stalled_pin = (bool(self.server_mac) and self.server_mac in neighbor.stdout.lower()
+                           and 'PERMANENT' in neighbor.stdout and self.server_mac in link.stdout.lower()
+                           and (isinstance(reason, TimeoutError) or getattr(reason, 'errno', None) in (101, 110, 113)))
+            if not (disconnected or bad_neighbor or stalled_pin):
                 return False
             result = subprocess.run(['wpa_cli', '-i', 'wlan0', 'reassociate'],
                                     capture_output=True, text=True, timeout=3)
@@ -267,7 +272,7 @@ if __name__ == "__main__":
     subprocess.run(["amixer", "cset", "name=ADC MICBIAS Voltage", "4"], check=True, stdout=subprocess.DEVNULL)
     subprocess.run(["amixer", "cset", "name=ADC HPF Cut-off", "Off"], check=True, stdout=subprocess.DEVNULL)
     subprocess.run(["amixer", "cset", "name=DAC LINEOUT Volume", "23"], check=True, stdout=subprocess.DEVNULL)
-    recovery = NetworkRecovery(config['server'])
+    recovery = NetworkRecovery(config['server'], config.get('server_mac', ''))
     while True:
         client = Client(config["server"], config["token"], config.get('server_mac', ''))
         started = time.monotonic()

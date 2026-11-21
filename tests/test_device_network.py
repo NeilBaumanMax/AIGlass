@@ -66,3 +66,13 @@ class NetworkTests(unittest.TestCase):
         with patch('device.client.subprocess.run', side_effect=replies) as run:
             self.assertFalse(pin_hotspot_neighbor('http://192.168.137.1:7860', mac, 'Not connected.'))
             self.assertEqual(run.call_args.args[0], ['arp', '-i', 'wlan0', '-d', '192.168.137.1'])
+
+    def test_verified_permanent_neighbor_with_repeated_timeouts_recovers(self):
+        mac = '02:11:22:33:44:55'
+        self.recovery.server_mac = mac
+        self.recovery.failures = 2
+        replies = [subprocess.CompletedProcess([], 0, 'Connected to ' + mac),
+                   subprocess.CompletedProcess([], 0, '192.168.137.1 lladdr ' + mac + ' PERMANENT'),
+                   subprocess.CompletedProcess([], 0, 'OK')]
+        with patch('device.client.subprocess.run', side_effect=replies):
+            self.assertTrue(self.recovery.failed(TimeoutError()))
