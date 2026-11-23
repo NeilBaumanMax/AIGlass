@@ -225,6 +225,61 @@ class SpeechTests(unittest.TestCase):
             self.speech.ingest(self.session, 1, bytes(6400))
             self.assertEqual(self.speech.poll(self.session, False, None)['text'], '我在，请说')
 
+    def test_idle_boundary_finalizes_pending_words_before_sleep(self):
+        self.speech.seen = 108
+        self.speech.awake_until = 108
+        self.speech.partial = '看看电脑屏幕'
+        self.speech.utterance = bytearray(b'pcm')
+        self.speech.recognizer = Mock()
+        self.speech.recognizer.FinalResult.return_value = '{"text":"看看 电脑 屏幕 读一下 内容"}'
+        with patch('backend.speech.time.monotonic', return_value=108), patch.object(self.speech, 'handle') as handle:
+            self.assertIsNone(self.speech.poll(self.session, False, None))
+        handle.assert_called_once_with('看看电脑屏幕读一下内容', b'pcm')
+        self.assertEqual(self.speech.awake_until, 116)
+
+    def test_near_speech_keeps_session_open_while_decoder_has_no_words_yet(self):
+        self.speech.seen = self.speech.mic_seen = 100
+        self.speech.seq = 0
+        self.speech.awake_until = 101
+        self.speech.model = object()
+        self.speech.recognizer = Mock()
+        self.speech.recognizer.AcceptWaveform.return_value = False
+        self.speech.recognizer.PartialResult.return_value = '{"partial":""}'
+        with patch('backend.speech.time.monotonic', return_value=100):
+            self.speech.ingest(self.session, 1, b'\x90\x01\x70\xfe' * 1600)
+        with patch('backend.speech.time.monotonic', return_value=100.2):
+            self.speech.ingest(self.session, 2, b'\x90\x01\x70\xfe' * 1600)
+        self.assertEqual(self.speech.awake_until, 108.2)
+
+    def test_pause_finalizes_stable_partial_without_waiting_for_vosk_endpoint(self):
+        speech = self.speech
+        speech.seen = speech.mic_seen = 100
+        speech.seq = 0
+        speech.awake_until = 108
+        speech.model = object()
+        speech.recognizer = Mock()
+        speech.recognizer.AcceptWaveform.return_value = False
+        speech.recognizer.PartialResult.return_value = '{"partial":"看看 电脑 屏幕"}'
+        speech.recognizer.FinalResult.return_value = '{"text":"看看 电脑 屏幕"}'
+        with patch('backend.speech.time.monotonic', return_value=100):
+            speech.ingest(self.session, 1, b'\x90\x01\x70\xfe' * 1600)
+        with patch('backend.speech.time.monotonic', return_value=100.2):
+            speech.ingest(self.session, 2, b'\x90\x01\x70\xfe' * 1600)
+        with patch('backend.speech.time.monotonic', return_value=101.3), patch.object(speech, 'handle') as handle:
+            speech.ingest(self.session, 3, bytes(6400))
+        self.assertEqual(handle.call_args.args[0], '看看电脑屏幕')
+
+    def test_partial_retracted_by_final_decoder_is_not_sent_as_command(self):
+        self.speech.seen = 108
+        self.speech.awake_until = 108
+        self.speech.partial = '未完成的识别'
+        self.speech.recognizer = Mock()
+        self.speech.recognizer.FinalResult.return_value = '{"text":""}'
+        with patch('backend.speech.time.monotonic', return_value=108), patch.object(self.speech, 'handle') as handle:
+            self.speech.poll(self.session, False, None)
+        handle.assert_not_called()
+        self.assertIsNone(self.speech.recognizer)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -55,6 +55,7 @@ class Speech:
         self.model = self.recognizer = None
         self.utterance = bytearray()
         self.partial = ""
+        self.last_voice_at = 0.0
         self.wake_hits = 0
         self.pending = deque(maxlen=4)
         self.active = None
@@ -101,6 +102,7 @@ class Speech:
             self.recognizer = None
             self.utterance.clear()
             self.partial = ""
+            self.last_voice_at = 0.0
             if self.wake_detector:
                 self.wake_detector.reset()
             self.wake_hits = 0
@@ -129,6 +131,10 @@ class Speech:
     def expire_dialog(self, now):
         if (self.awake_until and now >= self.awake_until and
                 not (self.busy or self.playing or self.active or self.pending)):
+            # Vosk may hold a stable partial without declaring an endpoint in
+            # background noise. Never discard those words at the idle boundary.
+            if self.partial and self.recognizer and self.finish_utterance():
+                return
             self.awake_until = 0
             self.history.clear()
             if self.agent:
@@ -136,6 +142,7 @@ class Speech:
             self.recognizer = None
             self.utterance.clear()
             self.partial = ""
+            self.last_voice_at = 0.0
             if self.wake_detector:
                 self.wake_detector.reset()
             self.generation += 1
@@ -251,7 +258,6 @@ class Speech:
             pcm = audioop.bias(pcm, 2, -audioop.avg(pcm, 2))
             rms = audioop.rms(pcm, 2)
             self.mic_dbfs = max(-90, round(20 * math.log10(rms / 32768))) if rms else -90
-            self.expire_dialog(now)
             # Waiting for a tool is not speaker playback. Even without AEC,
             # the user must be able to wake/interrupt a silent running task.
             occupied = muted or self.playing or self.active
@@ -266,10 +272,16 @@ class Speech:
                 self.recognizer = None
                 self.utterance.clear()
                 self.partial = ""
+                self.last_voice_at = 0.0
                 self.wake_hits = 0
                 if self.wake_detector:
                     self.wake_detector.reset()
                 return
+            if self.awake_until and near_voice:
+                self.last_voice_at = now
+                if self.voice_hits >= 2:
+                    self.awake_until = now + IDLE_SECONDS
+            self.expire_dialog(now)
             # Limited digital gain for normal conversational volume; never
             # change the codec gain dynamically or amplify a block over 4x.
             pcm = audioop.mul(pcm, 2, min(4.0, 600 / max(rms, 1)))
@@ -293,18 +305,27 @@ class Speech:
                 if self.awake_until and partial and partial != self.partial:
                     self.awake_until = time.monotonic() + IDLE_SECONDS
                 self.partial = partial
-            if complete or len(self.utterance) > 32000 * 12:
-                result = self.recognizer.Result() if complete else self.recognizer.FinalResult()
-                text = json.loads(result).get("text", "").replace(" ", "")
-                audio = bytes(self.utterance)
-                self.utterance.clear()
-                self.recognizer = None
-                self.partial = ""
-                self.wake_hits = 0
-                if text:
-                    if interruptible and not self.barged and self.awake_until:
-                        self.interrupt()
-                    self.handle(text, audio)
+            paused = self.partial and self.last_voice_at and now - self.last_voice_at >= 1.0
+            if complete or paused or len(self.utterance) > 32000 * 12:
+                self.finish_utterance(complete, interruptible)
+
+    def finish_utterance(self, complete=False, interruptible=False):
+        result = self.recognizer.Result() if complete else self.recognizer.FinalResult()
+        text = json.loads(result).get("text", "").replace(" ", "")
+        audio = bytes(self.utterance)
+        self.utterance.clear()
+        self.recognizer = None
+        self.partial = ""
+        self.last_voice_at = 0.0
+        self.wake_hits = 0
+        # Only the finalized transcript is a command, not an unconfirmed partial.
+        if text and self.awake_until:
+            if interruptible and not self.barged:
+                self.interrupt()
+            self.awake_until = time.monotonic() + IDLE_SECONDS
+            self.handle(text, audio)
+            return True
+        return False
 
     def detect_wake(self, pcm, gap, now):
         from .wake import WakeDetector
@@ -355,6 +376,7 @@ class Speech:
                 self.recognizer = None
                 self.utterance.clear()
                 self.partial = ""
+                self.last_voice_at = 0.0
                 if self.wake_detector:
                     self.wake_detector.reset()
                 self.runtime.emit("dialog", "唤醒词已识别 · " + text)
