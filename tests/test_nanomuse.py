@@ -11,6 +11,7 @@ import requests
 from backend.nanomuse import NanoMuse, Cancelled, NanoMuseError
 from backend.runtime import Runtime
 from backend.speech import Speech
+from backend.guidance import CUES
 
 
 class NanoMuseTests(unittest.TestCase):
@@ -105,6 +106,7 @@ class NanoMuseSpeechTests(unittest.TestCase):
     def setUp(self):
         self.runtime = Runtime()
         self.speech = Speech(self.runtime)
+        self.speech.prompts.update({cue.prompt: b'test-wav' for cue in CUES.values()})
         self.speech.connect()
         self.speech.pending.clear()
         self.agent = self.speech.agent = Mock()

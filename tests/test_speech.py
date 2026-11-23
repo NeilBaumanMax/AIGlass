@@ -13,6 +13,7 @@ class SpeechTests(unittest.TestCase):
     def setUp(self):
         self.runtime = Runtime()
         self.speech = Speech(self.runtime)
+        self.speech.prompts.update({cue.prompt: b'test-wav' for cue in CUES.values()})
         self.session = self.speech.connect()
         self.speech.pending.clear()
 

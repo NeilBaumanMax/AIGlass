@@ -68,7 +68,7 @@ tar --version
 nvidia-smi
 ```
 
-`nvidia-smi` 应显示 RTX 4090 和正常驱动。其显示的 CUDA 版本表示驱动支持能力，未必与 PyTorch 包版本相同；后面的 Python CUDA 检查才是本项目实际运行结果。本指南使用预编译 PyTorch wheel，不需要为了本项目额外编译 CUDA Toolkit。
+`nvidia-smi` 应显示实际显卡和正常驱动。其显示的 CUDA 版本表示驱动支持能力，未必与 PyTorch 包版本相同；后面的 Python CUDA 检查才是本项目实际运行结果。本指南使用预编译 PyTorch wheel，不需要为了本项目额外编译 CUDA Toolkit。
 
 以下命令默认在普通 PowerShell 执行；只有防火墙规则需要管理员权限。如果 PowerShell 禁止运行本仓库脚本，可在当前窗口设置 `Set-ExecutionPolicy -Scope Process RemoteSigned`。
 
@@ -102,7 +102,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -c "import torch; print(torch.__version__, torch.version.cuda); assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0)); print(torch.ones(4, device='cuda').sum().item())"
 ```
 
-预期包含 `2.6.0+cu126`、`12.6`、RTX 4090 和 `4.0`。如果失败，先解决驱动/PyTorch 环境，不能把 CPU 回退当作 GPU 部署通过。
+预期包含 `2.6.0+cu126`、`12.6`、实际显卡名称和 `4.0`。如果失败，先解决驱动/PyTorch 环境，不能把 CPU 回退当作 GPU 部署通过。
 
 ## 4. 安装视觉、唤醒模型和消回声库
 
@@ -332,7 +332,7 @@ $ServerIp = '192.168.137.1' # 替换为这台 4090 电脑的局域网 IPv4
 
 | 检查项 | 通过标准 |
 | --- | --- |
-| 环境 | `check-env.py` 通过，实际 GPU 为 RTX 4090 |
+| 环境 | `check-env.py` 通过，实际 GPU 与目标配置一致；4090 迁移时必须显示 RTX 4090 |
 | 模型 | `check-vision.py` 两模式通过，网页视觉引擎 ready/CUDA |
 | 联网 | 网页显示实际设备 IP、Linux、心跳；麦克风持续在线 |
 | 唤醒 | 正常音量说“嗨，Edith”，听到“我在，请说” |
