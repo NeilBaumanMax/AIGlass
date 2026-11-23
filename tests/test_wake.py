@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest.mock import Mock
 
-from wake import WakeDetector
+from backend.wake import WakeDetector
 
 
 class WakeTests(unittest.TestCase):

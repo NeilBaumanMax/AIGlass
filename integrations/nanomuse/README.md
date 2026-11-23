@@ -10,4 +10,4 @@
 
 接口：`GET /v1/status`，`POST /v1/task`，`GET /v1/task?conversation=UUID&turn_id=UUID`，`POST /v1/stop`，`POST /v1/approve`。任务、取消、确认都关联同一个 conversation/turn UUID；只返回自己的待确认请求，确认使用 `approval_id` 与布尔值 `allow`。同一个 turn 重复提交返回原状态，不再次执行。眼镜客户端每 0.2 秒查询任务，超过 30 秒没有查询或账号切换时请求停止。进程重启后未完成任务标记 interrupted。
 
-完整部署和验证见 [nanoMuse 接入指南](../../docs/nanoMuse接入.md)。
+完整部署和验证见 [nanoMuse 接入指南](../../docs/deployment/nanoMuse接入.md)。

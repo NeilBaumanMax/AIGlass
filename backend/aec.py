@@ -1,10 +1,10 @@
 """SpeexDSP acoustic echo cancellation with synchronized codec loopback."""
 import ctypes as C
-from pathlib import Path
+from .paths import ROOT
 
 import numpy as np
 
-DLL = Path(__file__).resolve().parent / '.tools/speexdsp/mingw64/bin/libspeexdsp-1.dll'
+DLL = ROOT / '.tools/speexdsp/mingw64/bin/libspeexdsp-1.dll'
 
 
 class EchoCanceller:

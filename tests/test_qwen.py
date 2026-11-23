@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 import wave
 
-import qwen
+from backend import qwen
 
 
 class QwenTests(unittest.TestCase):
@@ -22,7 +22,7 @@ class QwenTests(unittest.TestCase):
             b'data: [DONE]',
         ]
         with patch.dict(os.environ, {"DASHSCOPE_API_KEY": "test-only-key"}), \
-                patch("qwen.requests.post", return_value=response) as post:
+                patch("backend.qwen.requests.post", return_value=response) as post:
             text, audio = qwen.ask("测试指令", [], **kwargs)
         self.assertEqual(text, "测试回复")
         with wave.open(io.BytesIO(audio)) as wav:

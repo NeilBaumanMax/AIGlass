@@ -16,9 +16,9 @@ import wave
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from guidance import CUES, FRESH_SECONDS
-from runtime import Runtime
-from speech import Speech
+from backend.guidance import CUES, FRESH_SECONDS
+from backend.runtime import Runtime
+from backend.speech import Speech
 
 SCENES = [
     (0, 12, None), (12, 20, 'left'), (20, 34, 'obstacle'),

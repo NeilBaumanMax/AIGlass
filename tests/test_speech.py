@@ -2,11 +2,11 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-from app import create_app
-from runtime import Runtime
-from speech import Speech
-from vision import DIRECTION_MESSAGES
-from guidance import CUES
+from backend.app import create_app
+from backend.runtime import Runtime
+from backend.speech import Speech
+from backend.vision import DIRECTION_MESSAGES
+from backend.guidance import CUES
 
 
 class SpeechTests(unittest.TestCase):
@@ -59,7 +59,7 @@ class SpeechTests(unittest.TestCase):
 
     def test_stale_frame_not_sent_to_qwen(self):
         self.speech.handle("嗨，Edith")
-        with patch("qwen.ask") as ask:
+        with patch("backend.qwen.ask") as ask:
             self.speech.handle("看看当前画面")
             ask.assert_not_called()
         self.assertEqual(self.speech.pending[-1]["text"], "当前摄像头没有画面")
@@ -94,7 +94,7 @@ class SpeechTests(unittest.TestCase):
         def delayed_reply(*args):
             self.speech.alert("前方有障碍")
             return "已经失效的回复", b"wav"
-        with patch("qwen.ask", side_effect=delayed_reply):
+        with patch("backend.qwen.ask", side_effect=delayed_reply):
             self.speech._answer("问题", b"", None, [], generation)
         self.assertFalse(self.speech.history)
         self.assertFalse(self.speech.pending)
@@ -103,25 +103,25 @@ class SpeechTests(unittest.TestCase):
 
     def test_eight_second_idle_timeout_starts_after_playback(self):
         self.speech.seen = 100
-        with patch("speech.time.monotonic", return_value=100):
+        with patch("backend.speech.time.monotonic", return_value=100):
             self.speech.handle("嗨，Edith")
             wake = self.speech.poll(self.session, False, None)
         for now in (104, 108):
-            with patch("speech.time.monotonic", return_value=now):
+            with patch("backend.speech.time.monotonic", return_value=now):
                 self.speech.poll(self.session, True, None)
                 self.assertTrue(self.speech.snapshot()["awake"])
                 self.assertIsNone(self.speech.snapshot()["idle_remaining"])
-        with patch("speech.time.monotonic", return_value=109):
+        with patch("backend.speech.time.monotonic", return_value=109):
             self.speech.poll(self.session, False, wake["id"])
             self.assertEqual(self.speech.snapshot()["idle_remaining"], 8)
-        with patch("speech.time.monotonic", return_value=113):
+        with patch("backend.speech.time.monotonic", return_value=113):
             self.assertIsNone(self.speech.poll(self.session, False, None))
             self.assertTrue(self.speech.snapshot()["awake"])
-        with patch("speech.time.monotonic", return_value=117):
+        with patch("backend.speech.time.monotonic", return_value=117):
             timeout = self.speech.poll(self.session, False, None)
             self.assertEqual(timeout["text"], "对话结束")
             self.assertFalse(self.speech.snapshot()["awake"])
-            with patch("qwen.ask") as ask:
+            with patch("backend.qwen.ask") as ask:
                 self.speech.handle("介绍一下你自己")
                 ask.assert_not_called()
 
@@ -129,7 +129,7 @@ class SpeechTests(unittest.TestCase):
         self.speech.seen = 100
         self.speech.awake_until = 90
         self.speech.busy = True
-        with patch("speech.time.monotonic", return_value=100):
+        with patch("backend.speech.time.monotonic", return_value=100):
             self.assertIsNone(self.speech.poll(self.session, False, None))
             self.assertTrue(self.speech.snapshot()["awake"])
         self.assertEqual(self.speech.awake_until, 90)
@@ -142,10 +142,10 @@ class SpeechTests(unittest.TestCase):
         self.speech.recognizer = Mock()
         self.speech.recognizer.AcceptWaveform.return_value = False
         self.speech.recognizer.PartialResult.return_value = '{"partial":"介绍 一下"}'
-        with patch("speech.time.monotonic", return_value=100):
+        with patch("backend.speech.time.monotonic", return_value=100):
             self.speech.ingest(self.session, 1, bytes(6400))
             self.assertEqual(self.speech.awake_until, 108)
-        with patch("speech.time.monotonic", return_value=101):
+        with patch("backend.speech.time.monotonic", return_value=101):
             self.speech.ingest(self.session, 2, bytes(6400))
             self.assertEqual(self.speech.awake_until, 108)
 
@@ -154,10 +154,10 @@ class SpeechTests(unittest.TestCase):
         self.speech.seq = 0
         self.speech.wake_detector = Mock()
         self.speech.wake_detector.accept.side_effect = [False, True]
-        with patch("speech.time.monotonic", return_value=100):
+        with patch("backend.speech.time.monotonic", return_value=100):
             self.speech.ingest(self.session, 1, bytes(6400))
             self.assertFalse(self.speech.snapshot()["awake"])
-        with patch("speech.time.monotonic", return_value=100.2):
+        with patch("backend.speech.time.monotonic", return_value=100.2):
             self.speech.ingest(self.session, 2, bytes(6400))
             self.assertTrue(self.speech.snapshot()["awake"])
             self.assertEqual(self.speech.pending[-1]["text"], "我在，请说")
@@ -176,10 +176,10 @@ class SpeechTests(unittest.TestCase):
         self.speech.recognizer.AcceptWaveform.return_value = False
         self.speech.recognizer.PartialResult.return_value = '{"partial":"换个 话题"}'
         generation = self.speech.generation
-        with patch('speech.time.monotonic', return_value=100):
+        with patch('backend.speech.time.monotonic', return_value=100):
             self.speech.ingest(self.session, 1, bytes(12800), True, True)
             self.assertIsNotNone(self.speech.active)
-        with patch('speech.time.monotonic', return_value=100.2):
+        with patch('backend.speech.time.monotonic', return_value=100.2):
             self.speech.ingest(self.session, 2, bytes(12800), True, True)
             self.assertIsNone(self.speech.active)
             self.assertFalse(self.speech.busy)

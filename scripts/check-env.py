@@ -9,9 +9,11 @@ import wave
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from backend.config import load_env
 
 
 def main():
+    load_env()
     failed = []
 
     def check(name, probe):
@@ -52,7 +54,7 @@ def main():
         return f'{torch.cuda.get_device_name(0)} / torch {torch.__version__}'
 
     def vision_files():
-        from vision import UPSTREAM, WALKGUIDE_REVISION
+        from backend.vision import UPSTREAM, WALKGUIDE_REVISION
         actual = subprocess.check_output(['git', '-C', str(UPSTREAM), 'rev-parse', 'HEAD'],
                                          text=True, stderr=subprocess.DEVNULL).strip()
         assert actual == WALKGUIDE_REVISION
@@ -65,8 +67,8 @@ def main():
 
     def voice():
         from vosk import SetLogLevel
-        from wake import WakeDetector
-        from aec import EchoCanceller
+        from backend.wake import WakeDetector
+        from backend.aec import EchoCanceller
         SetLogLevel(-1)
         detector = WakeDetector()
         detector.reset()
@@ -75,27 +77,30 @@ def main():
         return 'local keyword/ASR models and SpeexDSP load successfully'
 
     def prompts():
-        from speech import PROMPTS
+        from backend.speech import PROMPTS
         for name in PROMPTS:
             with wave.open(str(ROOT / '.local/prompts' / (name + '.wav'))) as source:
                 assert source.getnframes() > 0 and source.getsampwidth() == 2
         return f'{len(PROMPTS)} local speech prompts'
 
     def api_key():
-        config = {}
-        path = ROOT / '.env'
-        if path.exists():
-            for line in path.read_text(encoding='utf-8-sig').splitlines():
-                name, separator, value = line.partition('=')
-                if separator and not name.lstrip().startswith('#'):
-                    config[name.strip()] = value.strip().strip('"').strip("'")
-        key = os.environ.get('DASHSCOPE_API_KEY', config.get('DASHSCOPE_API_KEY', ''))
+        key = os.environ.get('DASHSCOPE_API_KEY', '')
         assert key and key != 'replace_with_your_beijing_api_key'
         return 'key present; cloud authentication/quota NOT tested'
 
+    def ai_backend():
+        backend = os.getenv('AI_BACKEND', 'qwen')
+        assert backend in {'qwen', 'nanomuse'}
+        if backend == 'qwen':
+            return 'qwen direct conversation; desktop/phone tools are NOT enabled'
+        from backend.nanomuse import NanoMuse
+        status = NanoMuse(monitor=False)._http('GET', '/v1/status')
+        assert status.get('protocol') == 1 and status.get('signed_in')
+        return 'nanoMuse bridge online and signed in; model/tool actions NOT tested'
+
     for name, probe in [('interpreter', interpreter), ('dependencies', dependencies),
                         ('CUDA', cuda), ('vision files', vision_files), ('voice/AEC', voice),
-                        ('prompts', prompts), ('Qwen configuration', api_key)]:
+                        ('prompts', prompts), ('Qwen configuration', api_key), ('AI backend', ai_backend)]:
         check(name, probe)
     print('READY for device tests' if not failed else 'NOT READY: ' + ', '.join(failed))
     return int(bool(failed))

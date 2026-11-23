@@ -3,10 +3,10 @@ import threading
 import unittest
 from unittest.mock import patch
 
-from guidance import Alert, CUES, Guidance
-from app import create_app
-from runtime import Runtime
-from speech import Speech
+from backend.guidance import Alert, CUES, Guidance
+from backend.app import create_app
+from backend.runtime import Runtime
+from backend.speech import Speech
 
 
 class PolicyTests(unittest.TestCase):
@@ -149,7 +149,7 @@ class SpeechGuidanceTests(unittest.TestCase):
         self.runtime.guidance = Guidance(now=0)
         self.runtime.engine_state = 'ready'
         self.runtime.guidance.engine = 'ready'
-        with patch('speech.time.monotonic', return_value=100):
+        with patch('backend.speech.time.monotonic', return_value=100):
             self.session = self.speech.connect()
         self.speech.pending.clear()
         self.seq = 0
@@ -162,7 +162,7 @@ class SpeechGuidanceTests(unittest.TestCase):
         return start + duration
 
     def dispatch(self, now):
-        with patch('speech.time.monotonic', return_value=now):
+        with patch('backend.speech.time.monotonic', return_value=now):
             self.speech.seen = now
             return self.runtime.dispatch_guidance(now)
 
@@ -170,7 +170,7 @@ class SpeechGuidanceTests(unittest.TestCase):
         self.speech.agent_cancel = threading.Event()
         self.speech.busy = True
         self.speech.enqueue('old AI answer', b'old')
-        with patch('qwen.ask') as ask, patch('tts.synthesize') as tts:
+        with patch('backend.qwen.ask') as ask, patch('backend.tts.synthesize') as tts:
             self.dispatch(self.feed('stairs'))
         ask.assert_not_called()
         tts.assert_not_called()
@@ -199,7 +199,7 @@ class SpeechGuidanceTests(unittest.TestCase):
             self.seq += 1
             self.runtime.guidance.observe('obstacle', self.seq, when, when)
         # Direct delivery tests the speech priority gate independently of cooldown.
-        with patch('speech.time.monotonic', return_value=101.3):
+        with patch('backend.speech.time.monotonic', return_value=101.3):
             result = self.speech.alert(Alert('obstacle', self.runtime.guidance.epoch))
         self.assertEqual(result, 'priority_busy')
         self.assertEqual(self.speech.active['id'], first)
@@ -215,7 +215,7 @@ class SpeechGuidanceTests(unittest.TestCase):
     def test_no_speaker_or_missing_prompt_does_not_count_as_announced(self):
         now = self.feed('obstacle')
         self.speech.seen = 90
-        with patch('speech.time.monotonic', return_value=now):
+        with patch('backend.speech.time.monotonic', return_value=now):
             self.runtime.dispatch_guidance(now)
         self.assertEqual(self.runtime.guidance.delivery, 'audio_offline')
         self.assertIsNone(self.runtime.guidance.last_spoken)
@@ -226,17 +226,17 @@ class SpeechGuidanceTests(unittest.TestCase):
 
     def test_stale_queued_direction_is_dropped_at_device_poll(self):
         self.dispatch(self.feed('left'))
-        with patch('speech.time.monotonic', return_value=102.2):
+        with patch('backend.speech.time.monotonic', return_value=102.2):
             self.assertIsNone(self.speech.poll(self.session, False, None))
         self.assertFalse(self.speech.pending)
 
     def test_source_disconnect_cancels_already_playing_guidance(self):
         now = self.feed('left')
         self.dispatch(now)
-        with patch('speech.time.monotonic', return_value=now):
+        with patch('backend.speech.time.monotonic', return_value=now):
             active = self.speech.poll(self.session, False, None)
         self.runtime.disconnect()
-        with patch('speech.time.monotonic', return_value=now + .1):
+        with patch('backend.speech.time.monotonic', return_value=now + .1):
             self.assertIsNone(self.speech.poll(self.session, True, None))
         self.assertIsNotNone(active)
 
@@ -244,7 +244,7 @@ class SpeechGuidanceTests(unittest.TestCase):
         now = self.feed('obstacle')
         self.dispatch(now)
         current = self.speech.active['id']
-        with patch('speech.time.monotonic', return_value=now + .1):
+        with patch('backend.speech.time.monotonic', return_value=now + .1):
             self.speech.poll(self.session, False, current, 'test playback error')
         self.assertNotIn('obstacle', self.runtime.guidance.last_sent)
         self.assertEqual(self.runtime.guidance.delivery, 'playback_failed')
@@ -253,7 +253,7 @@ class SpeechGuidanceTests(unittest.TestCase):
         now = self.feed('stairs')
         self.dispatch(now)
         client = create_app(self.runtime, self.speech, 'test-device-token').test_client()
-        with patch('speech.time.monotonic', return_value=now):
+        with patch('backend.speech.time.monotonic', return_value=now):
             response = client.post('/device/poll', json={'session': self.session},
                                    headers={'X-Device-Token': 'test-device-token'})
         self.assertEqual(response.status_code, 200)

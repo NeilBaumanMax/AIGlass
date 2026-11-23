@@ -11,8 +11,8 @@ import sys
 import wave
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from wake import WakeDetector
-from aec import EchoCanceller
+from backend.wake import WakeDetector
+from backend.aec import EchoCanceller
 
 
 def check(path, detector):

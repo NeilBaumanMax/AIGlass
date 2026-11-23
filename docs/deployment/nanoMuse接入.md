@@ -25,7 +25,7 @@ flowchart LR
 
 ## Windows 11 安装与构建
 
-先完成 [4090 部署指南](部署指南-Windows11-RTX4090.md) 中现有 Edith 环境，再安装 Node.js 22 或更新版本、pnpm、Git。开发机已使用 Node 24 验证编译。
+先完成 [4090 部署指南](Windows11完整部署.md) 中现有 Edith 环境，再安装 Node.js 22 或更新版本、pnpm、Git。开发机已使用 Node 24 验证编译。
 
 在 AIGlass 根目录运行：
 

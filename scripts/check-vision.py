@@ -9,8 +9,8 @@ import time
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from runtime import Runtime
-from vision import DIRECTION_MESSAGES
+from backend.runtime import Runtime
+from backend.vision import DIRECTION_MESSAGES
 
 
 def wait_for(probe, seconds=30):

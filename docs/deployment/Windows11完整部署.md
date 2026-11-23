@@ -2,7 +2,7 @@
 
 当前电脑仅用于开发和联调。开发完成后，电脑后端迁移到另一台 **Windows 11 x64 + NVIDIA RTX 4090** 电脑，眼镜继续使用 Pico Zero Linux 板。
 
-这份指南对应当前仓库代码，会随开发更新。**目前没有在目标 4090 电脑完成部署验收，也没有完成 IMX415 实拍验收。** 开发机的性能数字不能当作 4090 的性能承诺。已验证项目与待验收项目见[施工记录](施工记录.md)。
+这份指南对应当前仓库代码，会随开发更新。**目前没有在目标 4090 电脑完成部署验收，也没有完成 IMX415 实拍验收。** 开发机的性能数字不能当作 4090 的性能承诺。已验证项目与待验收项目见[施工记录](../development/施工记录.md)。
 
 需要 nanoMuse 统一 AI 和操作手机时，先完成本指南的基础环境，再按 [nanoMuse 接入指南](nanoMuse接入.md) 构建桌面接入层、配置千问、登录并绑定手机。眼镜端继续使用现有 Linux 客户端。下面的直连千问流程保留用于分步验收。
 
@@ -160,7 +160,7 @@ DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 
 `check-vision.py` 实际加载模型，在室内/室外及三种尺寸上推理，检查方向输出、初始化测试图不外泄和断流清除。其输入是生成测试图，不是实景准确率测试，也不会替换正式服务的摄像头来源。
 
-摄像头未到货时，还可以运行 `.\.venv\Scripts\python.exe scripts/check-guidance.py` 检查识别结果如何转成语音。生成的 `.local/guidance-demo/report.json` 和 `preview.wav` 明确标记模拟场景，不连接在线眼镜。完整时序、优先级、过期结果处理及实景验收边界见 [视觉语音提醒](视觉语音提醒.md)。
+摄像头未到货时，还可以运行 `.\.venv\Scripts\python.exe scripts/check-guidance.py` 检查识别结果如何转成语音。生成的 `.local/guidance-demo/report.json` 和 `preview.wav` 明确标记模拟场景，不连接在线眼镜。完整时序、优先级、过期结果处理及实景验收边界见 [视觉语音提醒](../architecture/视觉语音提醒.md)。
 
 ## 8. 让板子连接新电脑所在网络
 

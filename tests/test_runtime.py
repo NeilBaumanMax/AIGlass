@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from app import create_app
-from runtime import Runtime
+from backend.app import create_app
+from backend.runtime import Runtime
 
 
 class RuntimeTests(unittest.TestCase):
@@ -33,7 +33,7 @@ class RuntimeTests(unittest.TestCase):
 
         runtime = Runtime()
         runtime.on_alert = lambda alert: 'accepted'
-        with patch("runtime.Vision", FakeVision):
+        with patch("backend.runtime.Vision", FakeVision):
             worker = threading.Thread(target=runtime._infer)
             worker.start()
             try:
@@ -87,7 +87,7 @@ class RuntimeTests(unittest.TestCase):
                 return image, '前方有障碍'
 
         runtime = Runtime()
-        with patch('runtime.Vision', SlowVision):
+        with patch('backend.runtime.Vision', SlowVision):
             worker = threading.Thread(target=runtime._infer)
             worker.start()
             try:

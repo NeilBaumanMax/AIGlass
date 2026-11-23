@@ -8,8 +8,8 @@ import uuid
 
 from PIL import Image
 
-from vision import Vision, WALKGUIDE_REVISION
-from guidance import Guidance, MESSAGE_KINDS
+from .vision import Vision, WALKGUIDE_REVISION
+from .guidance import Guidance, MESSAGE_KINDS
 
 
 def jpeg(image):
@@ -33,7 +33,7 @@ class Runtime:
         self.capture_epoch = 0
         self.pair = None
         self.pair_time = 0.0
-        from journal import Journal
+        from .journal import Journal
         self.journal = Journal(journal_path) if journal_path else None
         self.events = deque(self.journal.read() if self.journal else [], maxlen=500)
         self.auto_source = source is None

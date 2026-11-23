@@ -2,8 +2,8 @@ import tempfile
 from pathlib import Path
 import unittest
 
-from app import create_app
-from runtime import Runtime
+from backend.app import create_app
+from backend.runtime import Runtime
 
 
 class DashboardTests(unittest.TestCase):

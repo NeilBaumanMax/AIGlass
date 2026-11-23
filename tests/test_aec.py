@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from aec import DLL, EchoCanceller
+from backend.aec import DLL, EchoCanceller
 
 
 @unittest.skipUnless(DLL.exists(), 'Install the optional SpeexDSP runtime first')

@@ -5,7 +5,7 @@ from unittest.mock import patch
 import numpy as np
 from PIL import Image
 
-from vision import Vision, DIRECTION_MESSAGES
+from backend.vision import Vision, DIRECTION_MESSAGES
 from walking_guidance import direction_path, render_guidance
 from live_overlay import indoor_input, indoor_regions, render_regions
 from outdoor_channel import channel_input, render_channel

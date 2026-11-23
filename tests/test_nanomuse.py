@@ -8,9 +8,9 @@ from unittest.mock import Mock, patch
 
 import requests
 
-from nanomuse import NanoMuse, Cancelled, NanoMuseError
-from runtime import Runtime
-from speech import Speech
+from backend.nanomuse import NanoMuse, Cancelled, NanoMuseError
+from backend.runtime import Runtime
+from backend.speech import Speech
 
 
 class NanoMuseTests(unittest.TestCase):
@@ -53,7 +53,7 @@ class NanoMuseTests(unittest.TestCase):
                 self.assertFalse(self.client.approve('old-id', True))
                 self.assertTrue(self.client.approve('a1', True))
         self.client._http = http
-        with patch('nanomuse.time.sleep'):
+        with patch('backend.nanomuse.time.sleep'):
             self.client.ask('打开应用', None, event, threading.Event())
         self.assertFalse(any(e['stage'] == 'text' for e in events))
         self.assertFalse(self.client.approve('a1', True))
@@ -71,7 +71,7 @@ class NanoMuseTests(unittest.TestCase):
                 return {'state': 'cancelled'}
             return {'state': 'accepted', 'events': [{'stage': 'tool', 'name': 'delegate'}]}
         self.client._http = http
-        with patch('nanomuse.time.sleep'), self.assertRaises(Cancelled):
+        with patch('backend.nanomuse.time.sleep'), self.assertRaises(Cancelled):
             self.client.ask('打开应用', None, lambda e: cancel.set() if e['stage'] == 'tool' else None, cancel)
         self.assertFalse(self.client.state_file.exists())
         self.assertEqual(sum(c[1] == '/v1/stop' for c in calls), 1)
@@ -113,24 +113,24 @@ class NanoMuseSpeechTests(unittest.TestCase):
         self.speech.handle('嗨，Edith')
 
     def test_phone_page_does_not_require_glasses_camera(self):
-        with patch('speech.threading.Thread') as thread:
+        with patch('backend.speech.threading.Thread') as thread:
             self.speech.handle('看看手机页面并读出来')
         args = thread.call_args.kwargs['args']
         self.assertIsNone(args[2])
         self.assertNotIn('当前摄像头没有画面', [item['text'] for item in self.speech.pending])
 
     def test_computer_view_is_distinct_from_camera_view(self):
-        with patch('speech.threading.Thread') as thread:
+        with patch('backend.speech.threading.Thread') as thread:
             self.speech.handle('看看电脑')
         self.assertIsNone(thread.call_args.kwargs['args'][2])
         self.runtime.current_frame = Mock(return_value=b'fresh-camera-jpeg')
-        with patch('speech.threading.Thread') as thread:
+        with patch('backend.speech.threading.Thread') as thread:
             self.speech.handle('看看眼前的电脑')
         self.assertEqual(thread.call_args.kwargs['args'][2], b'fresh-camera-jpeg')
 
     def test_nanomuse_answer_uses_tts_without_direct_chat(self):
         self.agent.ask.return_value = '手机页面的实际结果'
-        with patch('qwen.ask') as direct, patch('tts.synthesize', return_value=b'wav') as synth:
+        with patch('backend.qwen.ask') as direct, patch('backend.tts.synthesize', return_value=b'wav') as synth:
             self.speech._answer('读手机页面', b'pcm', None, [], self.speech.generation)
         direct.assert_not_called()
         synth.assert_called_once_with('手机页面的实际结果')
@@ -144,7 +144,7 @@ class NanoMuseSpeechTests(unittest.TestCase):
         self.assertEqual(self.speech.generation, generation)
         self.assertFalse(self.speech.agent_cancel.is_set())
         self.assertTrue(self.speech.busy)
-        with patch('speech.threading.Thread') as thread:
+        with patch('backend.speech.threading.Thread') as thread:
             self.speech.handle('确认执行')
         self.assertEqual(thread.call_args.kwargs['args'], ('a1', True, generation))
 
@@ -160,7 +160,7 @@ class NanoMuseSpeechTests(unittest.TestCase):
 
     def test_tts_failure_does_not_run_phone_task_again(self):
         self.agent.ask.return_value = '已完成的真实结果'
-        with patch('tts.synthesize', side_effect=RuntimeError('tts unavailable')):
+        with patch('backend.tts.synthesize', side_effect=RuntimeError('tts unavailable')):
             self.speech._answer('读页面', b'', None, [], self.speech.generation)
         self.agent.ask.assert_called_once()
         self.assertTrue(any(e['text'] == 'Edith · 已完成的真实结果' for e in self.runtime.events))

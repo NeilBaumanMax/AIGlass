@@ -10,7 +10,7 @@ import uuid
 
 import requests
 
-ROOT = Path(__file__).resolve().parent
+from .paths import ROOT
 TERMINAL = {"completed", "cancelled", "failed", "interrupted"}
 
 

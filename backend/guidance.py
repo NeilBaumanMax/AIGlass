@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import threading
 import time
 
-from vision import DIRECTION_MESSAGES
+from .vision import DIRECTION_MESSAGES
 
 FRESH_SECONDS = 1.5
 STARTUP_NOTICE_SECONDS = 8

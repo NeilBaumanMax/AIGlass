@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 import numpy as np
 
-ROOT = Path(__file__).resolve().parent
+from .paths import ROOT
 MODEL = ROOT / 'models/sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20'
 PRONUNCIATIONS = ['嗨 伊 迪 丝', '嗨 伊 迪 斯', '海 伊 迪 丝', '嗨 伊 迪', '[unk]']
 PRONUNCIATION = re.compile(r'(?:嗨|海)伊迪(?:丝|斯)?')

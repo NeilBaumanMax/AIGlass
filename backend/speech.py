@@ -11,12 +11,12 @@ import threading
 import time
 import uuid
 
-import qwen
-from nanomuse import NanoMuse, NanoMuseError, Cancelled
-import tts
-from guidance import Alert, CUES, MESSAGE_KINDS
+from . import qwen
+from .nanomuse import NanoMuse, NanoMuseError, Cancelled
+from . import tts
+from .guidance import Alert, CUES, MESSAGE_KINDS
 
-ROOT = Path(__file__).resolve().parent
+from .paths import ROOT
 IDLE_SECONDS = 8
 WAKE = re.compile(r"(?:嗨|hi)[，,\s]*(?:edith|伊迪丝|伊迪斯)", re.I)
 LOOK = re.compile(r"^(?:请帮我|帮我|请|麻烦你)?(?:看看|看一下|看一看|看当前画面|描述(?:一下)?(?:当前|眼前的)?画面)")
@@ -231,7 +231,7 @@ class Speech:
                 if len(pcm) % 1280:
                     raise ValueError('无效的麦克风与参考音频帧')
                 try:
-                    from aec import EchoCanceller
+                    from .aec import EchoCanceller
                     if self.aec is None or gap:
                         if self.aec:
                             self.aec.close()
@@ -266,7 +266,7 @@ class Speech:
             # change the codec gain dynamically or amplify a block over 4x.
             pcm = audioop.mul(pcm, 2, min(4.0, 600 / max(rms, 1)))
             if not self.awake_until:
-                from wake import WakeDetector
+                from .wake import WakeDetector
                 if self.wake_detector is None:
                     if now < self.wake_retry_at:
                         return
