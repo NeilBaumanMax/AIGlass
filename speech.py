@@ -14,7 +14,7 @@ import uuid
 import qwen
 from nanomuse import NanoMuse, NanoMuseError, Cancelled
 import tts
-from vision import DIRECTION_MESSAGES
+from guidance import Alert, CUES, MESSAGE_KINDS
 
 ROOT = Path(__file__).resolve().parent
 IDLE_SECONDS = 8
@@ -29,10 +29,8 @@ PROMPTS = {
     "sleep": "对话结束",
     "no_frame": "当前摄像头没有画面",
     "error": "对话暂时不可用，请稍后重试",
-    "obstacle": "前方有障碍",
-    "stairs": "前方疑似台阶",
-    "unclear": "前方路面看不清",
-    **{"direction_" + key: value for key, value in DIRECTION_MESSAGES.items()},
+    **{cue.prompt: cue.text for cue in CUES.values()},
+    "vision_demo": "以下是模拟场景测试，不是实际路况",
 }
 
 
@@ -79,6 +77,7 @@ class Speech:
             self.cancel_agent()
             if self.agent:
                 self.agent.reset_conversation()
+            self.runtime.guidance.reconnect_audio()
             self.device_info = device_info or {}
             if self.aec:
                 self.aec.close()
@@ -140,36 +139,54 @@ class Speech:
             self.runtime.emit("dialog", "8 秒无新指令，对话结束，等待唤醒")
             self.prompt("sleep")
 
-    def prompt(self, name, urgent=False):
-        self.enqueue(PROMPTS[name], self.prompts.get(name, b""), urgent)
+    def prompt(self, name, urgent=False, visual=None):
+        self.enqueue(PROMPTS[name], self.prompts.get(name, b""), urgent, visual)
 
-    def enqueue(self, text, wav, urgent=False):
+    def enqueue(self, text, wav, urgent=False, visual=None):
         with self.lock:
             self.barged = False
             self.serial += 1
             item = {"id": self.serial, "text": text, "wav": base64.b64encode(wav).decode(),
                     "expires": time.monotonic() + (8 if urgent else 45)}
+            if visual:
+                item['_visual'] = visual
             if urgent:
                 self.pending.clear()
                 self.active = item
             else:
                 self.pending.append(item)
 
-    def alert(self, text):
-        name = {"前方有障碍": "obstacle", "前方疑似台阶": "stairs",
-                "前方路面看不清": "unclear",
-                **{value: "direction_" + key for key, value in DIRECTION_MESSAGES.items()}}.get(text)
-        if name:
-            with self.lock:
-                routine = name in {"direction_straight", "direction_left", "direction_right"}
-                # Routine directions are useful while walking, but must not
-                # interrupt a conversation or queue up stale instructions.
-                if routine and (self.awake_until or self.busy or self.playing or self.active or self.pending):
-                    return
+    def alert(self, alert):
+        # String input is retained for existing diagnostics. Runtime uses Alert.
+        checked = isinstance(alert, Alert)
+        if not checked:
+            kind = MESSAGE_KINDS.get(alert)
+            if not kind:
+                return 'unknown'
+            alert = Alert(kind, self.runtime.guidance.epoch)
+        with self.lock:
+            now = time.monotonic()
+            if not self.seen or now - self.seen > 4:
+                return 'audio_offline'
+            if checked and not self.runtime.guidance.valid(alert, now):
+                return 'stale'
+            if not self.prompts.get(alert.cue.prompt):
+                return 'missing_audio'
+            active_visual = self.active.get('_visual') if self.active else None
+            if active_visual and not self.runtime.guidance.valid(active_visual, now, playing=True):
+                self.active = None
+                active_visual = None
+            occupied = self.awake_until > now or self.busy or self.playing or self.active or self.pending
+            if not alert.interrupts and occupied:
+                return 'deferred'
+            if active_visual and active_visual.cue.priority >= alert.cue.priority:
+                return 'priority_busy'
+            if alert.interrupts:
                 self.generation += 1
                 self.cancel_agent()
                 self.busy = False
-                self.prompt(name, urgent=True)
+            self.prompt(alert.cue.prompt, urgent=alert.interrupts, visual=alert if checked else None)
+            return 'accepted'
 
     def poll(self, session, playing, done, error=""):
         with self.lock:
@@ -182,15 +199,20 @@ class Speech:
             self.playing = bool(playing)
             if self.active and self.active["id"] == done:
                 self.runtime.emit("status", ("播放失败 " + error) if error else "已播放 · " + self.active["text"])
+                if error and self.active.get('_visual'):
+                    self.runtime.guidance.playback_failed(self.active['_visual'])
                 self.active = None
                 if self.awake_until:
                     self.awake_until = now + IDLE_SECONDS
             if self.active and self.active["expires"] < now:
                 self.active = None
+            if self.active and self.active.get('_visual') and not self.runtime.guidance.valid(self.active['_visual'], now, playing=True):
+                self.active = None
             self.expire_dialog(now)
             while self.active is None and self.pending:
                 item = self.pending.popleft()
-                if item["expires"] >= now:
+                if (item["expires"] >= now and
+                        (not item.get('_visual') or self.runtime.guidance.valid(item['_visual'], now))):
                     self.active = item
             return self.active
 

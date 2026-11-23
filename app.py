@@ -76,7 +76,7 @@ def create_app(runtime, speech=None, token=""):
             command = speech.poll(body["session"], body.get("playing", False),
                                   body.get("done"), str(body.get("error", ""))[:100])
             if command:
-                command = {key: value for key, value in command.items() if key != "expires"}
+                command = {key: value for key, value in command.items() if key != "expires" and not key.startswith('_')}
                 if body.get("current") == command["id"]:
                     command.pop("wav", None)
             return jsonify(command=command)

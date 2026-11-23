@@ -32,6 +32,7 @@ class RuntimeTests(unittest.TestCase):
                 return image, "前方有障碍"
 
         runtime = Runtime()
+        runtime.on_alert = lambda alert: 'accepted'
         with patch("runtime.Vision", FakeVision):
             worker = threading.Thread(target=runtime._infer)
             worker.start()
@@ -39,8 +40,10 @@ class RuntimeTests(unittest.TestCase):
                 for count in range(1, 5):
                     runtime.ingest(Image.new("RGB", (64, 48)))
                     deadline = time.monotonic() + 2
-                    while len(calls) < count and time.monotonic() < deadline:
+                    while (runtime.pair is None or runtime.pair['sequence'] < count) and time.monotonic() < deadline:
                         time.sleep(.01)
+                    runtime.dispatch_guidance()
+                    time.sleep(.12)
                 time.sleep(.05)
                 self.assertEqual(len(calls), 4)
                 self.assertEqual(len(runtime.snapshot()["events"]), 1)
@@ -65,6 +68,44 @@ class RuntimeTests(unittest.TestCase):
         runtime.frame_time -= 5
         self.assertIsNone(runtime.snapshot()["frame"])
         self.assertIsNone(runtime.current_frame())
+
+    def test_source_change_drops_inflight_old_result(self):
+        entered, release, next_entered, next_release = (threading.Event() for _ in range(4))
+        calls = []
+
+        class SlowVision:
+            device = 'test'
+
+            def analyze(self, image, mode):
+                calls.append(mode)
+                if len(calls) == 1:
+                    entered.set()
+                    release.wait(3)
+                else:
+                    next_entered.set()
+                    next_release.wait(3)
+                return image, '前方有障碍'
+
+        runtime = Runtime()
+        with patch('runtime.Vision', SlowVision):
+            worker = threading.Thread(target=runtime._infer)
+            worker.start()
+            try:
+                runtime.ingest(Image.new('RGB', (64, 48)))
+                self.assertTrue(entered.wait(2))
+                runtime.configure_glasses('192.0.2.10')
+                runtime.ingest(Image.new('RGB', (64, 48), 'white'))
+                release.set()
+                self.assertTrue(next_entered.wait(2))
+                self.assertIsNone(runtime.pair)
+                self.assertIsNone(runtime.guidance.observed_at)
+            finally:
+                runtime.stop.set()
+                release.set()
+                next_release.set()
+                with runtime.changed:
+                    runtime.changed.notify_all()
+                worker.join(3)
 
     def test_stalled_inference_hides_old_pair_even_if_capture_is_live(self):
         runtime = Runtime()

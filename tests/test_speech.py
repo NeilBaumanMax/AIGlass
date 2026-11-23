@@ -6,6 +6,7 @@ from app import create_app
 from runtime import Runtime
 from speech import Speech
 from vision import DIRECTION_MESSAGES
+from guidance import CUES
 
 
 class SpeechTests(unittest.TestCase):
@@ -49,11 +50,11 @@ class SpeechTests(unittest.TestCase):
         self.speech.alert(DIRECTION_MESSAGES['stop'])
         stop = self.speech.poll(self.session, True, wake['id'])
         self.assertNotEqual(stop['id'], wake['id'])
-        self.assertEqual(stop['text'], DIRECTION_MESSAGES['stop'])
+        self.assertEqual(stop['text'], CUES['stop'].text)
 
     def test_idle_direction_is_spoken_without_waking_dialog(self):
         self.speech.alert(DIRECTION_MESSAGES['right'])
-        self.assertEqual(self.speech.poll(self.session, False, None)['text'], DIRECTION_MESSAGES['right'])
+        self.assertEqual(self.speech.poll(self.session, False, None)['text'], CUES['right'].text)
         self.assertFalse(self.speech.snapshot()['awake'])
 
     def test_stale_frame_not_sent_to_qwen(self):

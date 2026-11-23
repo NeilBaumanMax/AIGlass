@@ -9,6 +9,7 @@ import uuid
 from PIL import Image
 
 from vision import Vision, WALKGUIDE_REVISION
+from guidance import Guidance, MESSAGE_KINDS
 
 
 def jpeg(image):
@@ -29,6 +30,7 @@ class Runtime:
         self.frame = None
         self.frame_time = 0.0
         self.sequence = 0
+        self.capture_epoch = 0
         self.pair = None
         self.pair_time = 0.0
         from journal import Journal
@@ -39,7 +41,8 @@ class Runtime:
         self.error = ""
         self.device = ""
         self.latency = 0
-        self.on_alert = lambda text: None
+        self.guidance = Guidance()
+        self.on_alert = lambda alert: 'audio_unavailable'
         self.threads = []
 
     def emit(self, kind, text):
@@ -67,8 +70,12 @@ class Runtime:
         if mode not in {"indoor", "outdoor"}:
             raise ValueError("invalid mode")
         with self.changed:
+            if self.mode == mode:
+                return
             self.mode = mode
             self.pair = None
+            self.capture_epoch += 1
+            self.guidance.reset()
             self.changed.notify_all()
 
     def ingest(self, image):
@@ -82,6 +89,8 @@ class Runtime:
         with self.lock:
             self.frame = self.pair = None
             self.frame_time = 0
+            self.capture_epoch += 1
+            self.guidance.reset()
 
     def current_frame(self):
         with self.lock:
@@ -98,14 +107,33 @@ class Runtime:
                 "engine_state": self.engine_state,
                 "vision_revision": WALKGUIDE_REVISION,
                 "error": self.error, "events": list(self.events),
+                "guidance": self.guidance.snapshot(),
                 "frame": self.pair if fresh and time.monotonic() - self.pair_time < 4 else None,
             }
 
     def start(self):
-        for target in (self._capture, self._infer):
+        for target in (self._capture, self._infer, self._guide):
             thread = threading.Thread(target=target, daemon=True)
             thread.start()
             self.threads.append(thread)
+
+    def dispatch_guidance(self, now=None):
+        self.guidance.engine = self.engine_state
+        alert = self.guidance.next_alert(now)
+        if alert:
+            try:
+                result = self.on_alert(alert)
+            except Exception:
+                logging.exception('Visual speech delivery failed')
+                result = 'audio_error'
+            self.guidance.acknowledge(alert, result, now)
+            if result == 'accepted':
+                self.emit('alert', alert.cue.text)
+        return alert
+
+    def _guide(self):
+        while not self.stop.wait(.2):
+            self.dispatch_guidance()
 
     def _capture(self):
         import cv2
@@ -154,28 +182,21 @@ class Runtime:
             self.engine_state = "error"
             self.error = "视觉模型加载失败，请检查模型文件"
         last = None
-        stable = ""
-        candidate = None
-        count = 0
-        previous_at = 0
         while not self.stop.is_set():
             with self.changed:
                 self.changed.wait_for(
                     lambda: self.stop.is_set() or
-                    (self.frame is not None and (self.sequence, self.mode) != last),
+                    (self.frame is not None and (self.capture_epoch, self.sequence, self.mode) != last),
                     timeout=1,
                 )
                 if self.stop.is_set():
                     return
-                if self.frame is None or (self.sequence, self.mode) == last:
+                if self.frame is None or (self.capture_epoch, self.sequence, self.mode) == last:
                     continue
                 image, when = self.frame.copy(), self.frame_time
-                seq, mode = self.sequence, self.mode
-                if last is None or last[1] != mode or when - previous_at > 4:
-                    candidate, stable, count = None, "", 0
-                last, previous_at = (seq, mode), when
+                epoch, seq, mode = self.capture_epoch, self.sequence, self.mode
+                last = (epoch, seq, mode)
             started = time.monotonic()
-            alert_to_say = ""
             try:
                 vision = vision or Vision()
                 overlay, event = vision.analyze(image, mode)
@@ -184,7 +205,7 @@ class Runtime:
                         "width": image.width, "height": image.height,
                         "analysis": getattr(vision, 'analysis', None)}
                 with self.lock:
-                    if self.mode != mode or time.monotonic() - when > 4 or self.frame is None:
+                    if self.capture_epoch != epoch or self.mode != mode or time.monotonic() - when > 4 or self.frame is None:
                         continue
                     self.pair = pair
                     self.pair_time = when
@@ -192,18 +213,11 @@ class Runtime:
                     self.latency = round((time.monotonic() - started) * 1000)
                     self.error = ""
                     self.engine_state = "ready"
-                    count = count + 1 if event == candidate else 1
-                    candidate = event
-                    if count >= (5 if event == "前方路面看不清" else 3) and event != stable:
-                        stable = event
-                        if event:
-                            self.emit("alert", event)
-                            alert_to_say = event
-                if alert_to_say:
-                    self.on_alert(alert_to_say)
+                    self.guidance.observe(MESSAGE_KINDS.get(event, 'unclear'), seq, when)
             except Exception:
                 logging.exception("Video inference failed")
                 with self.lock:
                     self.error = "视觉处理失败，请检查后端日志"
+                    self.engine_state = 'error'
                     self.pair = None
                 self.stop.wait(2)
