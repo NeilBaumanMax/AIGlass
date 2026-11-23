@@ -58,6 +58,24 @@ function renderEvents(events) {
   }));
   el('recent-empty').hidden = alerts.length > 0;
 }
+function renderGuidance(guidance, disconnected=false) {
+  // A running server may still have the previous template cached until restart.
+  if (!el('guidance-state')) return;
+  if (!guidance) {
+    label('guidance-state', disconnected ? '状态未知' : '策略待加载', 'warning');
+    label('guidance-current', disconnected ? '电脑后端连接中断' : '等待新版后端状态');
+    label('guidance-detail', disconnected ? '历史提醒不代表当前路况' : '正常重启后端后同步提醒策略');
+    return;
+  }
+  const names = {loading:'视觉加载中', waiting:'视觉未启用', confirming:'重新确认中', ready:'提醒已就绪', lost:'提醒已暂停', error:'提醒异常'};
+  const kinds = {stairs:'疑似台阶', obstacle:'前方障碍', stop:'通道不明确', unclear:'路面看不清', left:'通道偏左', right:'通道偏右', straight:'通道向前'};
+  const notes = {loading:'等待模型加载完成', waiting:'等待摄像头，不播报方向', confirming:'切换来源或模式后，重新确认画面', lost:'没有新鲜结果，已停止使用旧方向', error:'请检查视觉服务的错误信息'};
+  const deferred = guidance.state === 'ready' && guidance.delivery === 'deferred';
+  label('guidance-state', deferred ? '等待对话空闲' : names[guidance.state] || '等待状态', guidance.state === 'ready' ? 'good' : 'warning');
+  label('guidance-current', guidance.state === 'ready' ? (guidance.confirmed ? '已确认 · ' + kinds[guidance.confirmed] : '多帧确认中') : notes[guidance.state] || '等待视觉结果');
+  const failures = {audio_offline:'喇叭离线，提醒尚未送达', missing_audio:'本地提示音缺失，请重新生成', audio_error:'语音调度异常，请查看后端日志', playback_failed:'播放失败，等待重试'};
+  label('guidance-detail', failures[guidance.delivery] || (deferred ? '对话结束后重查画面，再决定播报' : guidance.delivery === 'priority_busy' ? '正在播放更高优先级提醒' : guidance.last_spoken ? '最近发出：' + guidance.last_spoken : '无需唤醒 · 本地语音提示'));
+}
 function display(next) {
   state = next;
   const audio = next.audio || {}, info = audio.device || {}, online = audio.online;
@@ -106,6 +124,7 @@ function display(next) {
   label('os-info', info.os || '等待 Linux 设备信息'); label('ssid', info.ssid || '—');label('board-ip', info.ip || '—');
   label('heartbeat', online ? (audio.heartbeat_age || 0) + ' 秒前' : '已离线');
   label('source-address', next.source || '等待设备');label('events-live', '实时同步');
+  renderGuidance(next.guidance);
   renderDialog(next.events.filter(e=>e.kind==='dialog'));renderEvents(next.events.filter(e=>e.kind!=='dialog'));
 }
 async function refresh() {
@@ -118,6 +137,7 @@ async function refresh() {
     label('video-badge','连接中断','bad');label('stats','无实时数据');el('presence').dataset.phase='offline';clearImages();
     label('device-health','状态未知','warning');label('wake-detail','等待后端恢复');label('ai-detail','等待后端恢复');
     label('vision-detail','等待后端恢复');label('video-note','电脑后端连接中断，正在重连。');label('events-live','历史记录');
+    renderGuidance(null, true);
   } finally { setTimeout(refresh,500); }
 }
 el('clear-dialog').addEventListener('click',async()=>{

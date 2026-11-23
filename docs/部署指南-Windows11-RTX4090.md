@@ -125,7 +125,7 @@ $speaker.GetVoices() | ForEach-Object { $_.GetDescription() }
 .\scripts\make-prompts.ps1
 ```
 
-脚本将当前代码中的“我在，请说”、模式切换、退出、视觉方向等提示语生成到 `.local/prompts/*.wav`。如果没有 Huihui，安装 Windows 中文语音组件后重新确认；也可以复制同一代码版本在开发机生成的整个 `.local/prompts` 目录，再运行预检。仅有模型而没有提示音时，设备可能识别成功却没有可播放的本地应答。
+脚本将当前代码中的“我在，请说”、模式切换、退出、视觉方向、断流与恢复等 19 条提示语生成到 `.local/prompts/*.wav`。如果没有 Huihui，安装 Windows 中文语音组件后重新确认；也可以复制同一代码版本在开发机生成的整个 `.local/prompts` 目录，再运行预检。仅有模型而没有提示音时，设备可能识别成功却没有可播放的本地应答。更新提示音后正常重启后端才能加载。
 
 ## 6. 配置千问北京地域
 
@@ -159,6 +159,8 @@ DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 `check-env.py` 只读检查 Python、依赖、CUDA 运算、子模块版本、视觉权重、唤醒/ASR/AEC 加载、本地提示音及密钥是否已填；不输出密钥，不连接千问，不修改板子。最终应显示 `READY for device tests`。这不代表云端鉴权、额度和实机音频已经通过。
 
 `check-vision.py` 实际加载模型，在室内/室外及三种尺寸上推理，检查方向输出、初始化测试图不外泄和断流清除。其输入是生成测试图，不是实景准确率测试，也不会替换正式服务的摄像头来源。
+
+摄像头未到货时，还可以运行 `.\.venv\Scripts\python.exe scripts/check-guidance.py` 检查识别结果如何转成语音。生成的 `.local/guidance-demo/report.json` 和 `preview.wav` 明确标记模拟场景，不连接在线眼镜。完整时序、优先级、过期结果处理及实景验收边界见 [视觉语音提醒](视觉语音提醒.md)。
 
 ## 8. 让板子连接新电脑所在网络
 
