@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 from backend.app import create_app
 from backend.runtime import Runtime
-from backend.speech import Speech
+from backend.speech import Speech, PROMPTS
 from backend.vision import DIRECTION_MESSAGES
 from backend.guidance import CUES
 
@@ -13,7 +13,9 @@ class SpeechTests(unittest.TestCase):
     def setUp(self):
         self.runtime = Runtime()
         self.speech = Speech(self.runtime)
-        self.speech.prompts.update({cue.prompt: b'test-wav' for cue in CUES.values()})
+        self.speech.wake_detector = Mock()
+        self.speech.wake_detector.accept.return_value = False
+        self.speech.prompts = {name: b'test-wav' for name in PROMPTS}
         self.session = self.speech.connect()
         self.speech.pending.clear()
 
@@ -161,7 +163,7 @@ class SpeechTests(unittest.TestCase):
         with patch("backend.speech.time.monotonic", return_value=100.2):
             self.speech.ingest(self.session, 2, bytes(6400))
             self.assertTrue(self.speech.snapshot()["awake"])
-            self.assertEqual(self.speech.pending[-1]["text"], "我在，请说")
+            self.assertEqual(self.speech.active["text"], "我在，请说")
             self.assertIsNone(self.speech.recognizer)
 
     def test_duplex_speech_interrupts_playback_and_invalidates_pending_answer(self):
@@ -185,6 +187,43 @@ class SpeechTests(unittest.TestCase):
             self.assertIsNone(self.speech.active)
             self.assertFalse(self.speech.busy)
             self.assertGreater(self.speech.generation, generation)
+
+    def test_keyword_detection_preempts_asr_in_every_dialog_phase(self):
+        for phase in ('listening', 'thinking', 'playing', 'expired_idle'):
+            with self.subTest(phase=phase):
+                speech = self.speech
+                session = speech.connect()
+                speech.pending.clear()
+                speech.seen = speech.mic_seen = 100
+                speech.seq = 0
+                speech.awake_until = 99 if phase == 'expired_idle' else 108
+                speech.busy = phase == 'thinking'
+                speech.playing = phase == 'playing'
+                speech.wake_detector.accept.return_value = True
+                speech.aec = Mock()
+                speech.aec.process.return_value = b'\x90\x01\x70\xfe' * 1600
+                speech.recognizer = Mock()
+                old_recognizer = speech.recognizer
+                generation = speech.generation
+                with patch('backend.speech.time.monotonic', return_value=100):
+                    speech.ingest(session, 1, bytes(12800), duplex=True)
+                    command = speech.poll(session, False, None)
+                self.assertEqual(command['text'], '我在，请说')
+                self.assertFalse(speech.pending)
+                self.assertFalse(speech.busy)
+                self.assertGreater(speech.generation, generation)
+                old_recognizer.AcceptWaveform.assert_not_called()
+                self.assertIsNone(speech.recognizer)
+
+    def test_wake_during_silent_task_works_without_echo_canceller(self):
+        self.speech.seen = self.speech.mic_seen = 100
+        self.speech.seq = 0
+        self.speech.awake_until = 90
+        self.speech.busy = True
+        self.speech.wake_detector.accept.return_value = True
+        with patch('backend.speech.time.monotonic', return_value=100):
+            self.speech.ingest(self.session, 1, bytes(6400))
+            self.assertEqual(self.speech.poll(self.session, False, None)['text'], '我在，请说')
 
 
 if __name__ == "__main__":

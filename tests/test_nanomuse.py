@@ -10,8 +10,7 @@ import requests
 
 from backend.nanomuse import NanoMuse, Cancelled, NanoMuseError
 from backend.runtime import Runtime
-from backend.speech import Speech
-from backend.guidance import CUES
+from backend.speech import Speech, PROMPTS
 
 
 class NanoMuseTests(unittest.TestCase):
@@ -106,13 +105,13 @@ class NanoMuseSpeechTests(unittest.TestCase):
     def setUp(self):
         self.runtime = Runtime()
         self.speech = Speech(self.runtime)
-        self.speech.prompts.update({cue.prompt: b'test-wav' for cue in CUES.values()})
+        self.speech.prompts = {name: b'test-wav' for name in PROMPTS}
         self.speech.connect()
         self.speech.pending.clear()
         self.agent = self.speech.agent = Mock()
         self.agent.snapshot.return_value = {'provider': 'nanomuse', 'approval': None}
-        self.speech.agent_cancel = threading.Event()
         self.speech.handle('嗨，Edith')
+        self.speech.agent_cancel = threading.Event()
 
     def test_phone_page_does_not_require_glasses_camera(self):
         with patch('backend.speech.threading.Thread') as thread:
@@ -166,3 +165,139 @@ class NanoMuseSpeechTests(unittest.TestCase):
             self.speech._answer('读页面', b'', None, [], self.speech.generation)
         self.agent.ask.assert_called_once()
         self.assertTrue(any(e['text'] == 'Edith · 已完成的真实结果' for e in self.runtime.events))
+
+    def start_answer(self, text):
+        with patch('backend.speech.threading.Thread') as thread:
+            self.speech.handle(text)
+        return thread.call_args.kwargs['args']
+
+    def test_old_cancelled_worker_cannot_clear_new_tasks_busy_state(self):
+        first = self.start_answer('第一项任务')
+        second = self.start_answer('第二项任务')
+        self.assertTrue(first[-1].is_set())
+        self.agent.ask.side_effect = Cancelled()
+        self.speech._answer(*first)
+        self.speech.pending.clear()
+        self.speech.active = None
+        with patch('backend.speech.time.monotonic', return_value=self.speech.awake_until + 20) as clock:
+            self.speech.seen = clock.return_value
+            self.assertIsNone(self.speech.poll(self.speech.session, False, None))
+            self.assertTrue(self.speech.snapshot()['awake'])
+            self.assertIsNone(self.speech.snapshot()['idle_remaining'])
+        self.assertTrue(self.speech.busy)
+        self.assertFalse(second[-1].is_set())
+
+    def test_reply_in_tts_cannot_leak_into_replacement_task(self):
+        first = self.start_answer('第一项任务')
+        self.agent.ask.return_value = '旧任务结果'
+        def synthesize(_):
+            self.start_answer('第二项任务')
+            return b'old-wav'
+        with patch('backend.tts.synthesize', side_effect=synthesize):
+            self.speech._answer(*first)
+        self.assertTrue(self.speech.busy)
+        self.assertNotIn('旧任务结果', [p['text'] for p in self.speech.pending])
+        self.assertFalse(self.speech.history)
+
+    def test_rewake_cancels_task_and_prioritizes_ack_over_old_audio(self):
+        args = self.start_answer('读页面')
+        self.speech.poll(self.speech.session, False, None)
+        self.speech.enqueue('旧播报', b'old-wav')
+        self.agent.snapshot.return_value['approval'] = {'approval_id': 'a1'}
+        with patch('backend.speech.threading.Thread') as thread:
+            self.speech.handle('嗨，Edith')
+        thread.assert_not_called()
+        self.assertTrue(args[-1].is_set())
+        self.assertFalse(self.speech.busy)
+        self.assertEqual(self.speech.poll(self.speech.session, False, None)['text'], '我在，请说')
+        self.assertFalse(self.speech.pending)
+        self.agent.approve.assert_not_called()
+
+    def test_long_task_and_tts_wait_until_playback_then_start_eight_seconds(self):
+        clock = [100.0]
+        speech = self.speech
+        speech.pending.clear()
+        speech.active = None
+        def poll_at(now, playing=False, done=None):
+            clock[0] = now
+            speech.seen = now
+            return speech.poll(speech.session, playing, done)
+        def wait_task(*_):
+            for now in (109, 130, 160):
+                command = poll_at(now)
+                if command:
+                    self.assertNotEqual(command['text'], '对话结束')
+                    poll_at(now, done=command['id'])
+                self.assertTrue(speech.snapshot()['awake'])
+                self.assertIsNone(speech.snapshot()['idle_remaining'])
+            return '任务结果'
+        def wait_tts(_):
+            poll_at(180)
+            self.assertTrue(speech.busy)
+            return b'wav'
+        self.agent.ask.side_effect = wait_task
+        with patch('backend.speech.time.monotonic', side_effect=lambda: clock[0]):
+            speech.seen = 100
+            speech.awake_until = 108
+            args = self.start_answer('耗时任务')
+            with patch('backend.tts.synthesize', side_effect=wait_tts):
+                speech._answer(*args)
+            answer = poll_at(180)
+            self.assertEqual(answer['text'], '任务结果')
+            poll_at(195, playing=True)
+            self.assertIsNone(speech.snapshot()['idle_remaining'])
+            poll_at(200, done=answer['id'])
+            self.assertEqual(speech.snapshot()['idle_remaining'], 8)
+            self.assertIsNone(poll_at(207))
+            self.assertEqual(poll_at(208)['text'], '对话结束')
+
+    def test_confirmation_is_accepted_after_idle_deadline_during_task(self):
+        self.speech.pending.clear()
+        self.speech.active = None
+        self.speech.awake_until = time.monotonic() - 20
+        self.speech.busy = True
+        self.agent.snapshot.return_value['approval'] = {'approval_id': 'a1'}
+        with patch('backend.speech.threading.Thread') as thread:
+            self.speech.handle('确认执行')
+        self.assertEqual(thread.call_args.kwargs['args'], ('a1', True, self.speech.generation))
+
+    def test_wait_notice_is_rate_limited_and_does_not_overlap_approval(self):
+        with patch('backend.speech.time.monotonic', return_value=100):
+            self.speech.seen = 100
+            self.speech.awake_until = 108
+            args = self.start_answer('耗时任务')
+        self.assertEqual(self.speech.pending[-1]['text'], '正在处理，请稍候')
+        self.speech.active = None
+        self.speech.pending.clear()
+        for now, expected in ((129, 0), (130, 1), (131, 1)):
+            with patch('backend.speech.time.monotonic', return_value=now):
+                self.speech.seen = now
+                self.speech._agent_event({'stage': 'heartbeat'}, args[-2])
+            self.assertEqual(len(self.speech.pending), expected)
+        self.assertEqual(self.speech.pending[-1]['text'], '任务仍在执行，请稍候')
+        self.speech.pending.clear()
+        self.agent.snapshot.return_value['approval'] = {'approval_id': 'a1'}
+        with patch('backend.speech.time.monotonic', return_value=170):
+            self.speech.seen = 170
+            self.speech._agent_event({'stage': 'heartbeat'}, args[-2])
+        self.assertFalse(self.speech.pending)
+
+    def test_cancel_during_tts_discards_answer_even_without_generation_change(self):
+        args = self.start_answer('读页面')
+        self.agent.ask.return_value = '旧任务结果'
+        def synthesize(_):
+            args[-1].set()
+            return b'old-wav'
+        with patch('backend.tts.synthesize', side_effect=synthesize):
+            self.speech._answer(*args)
+        self.assertNotIn('旧任务结果', [p['text'] for p in self.speech.pending])
+
+    def test_old_worker_error_cannot_play_over_new_wake(self):
+        args = self.start_answer('读页面')
+        def ask(*_):
+            self.speech.handle('嗨，Edith')
+            raise NanoMuseError('旧任务报错')
+        self.agent.ask.side_effect = ask
+        self.speech._answer(*args)
+        self.assertEqual(self.speech.poll(self.speech.session, False, None)['text'], '我在，请说')
+        self.assertFalse(self.speech.pending)
