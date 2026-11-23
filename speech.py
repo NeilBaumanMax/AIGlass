@@ -4,6 +4,7 @@ from collections import deque
 import json
 import logging
 import math
+import os
 from pathlib import Path
 import re
 import threading
@@ -11,6 +12,8 @@ import time
 import uuid
 
 import qwen
+from nanomuse import NanoMuse, NanoMuseError, Cancelled
+import tts
 from vision import DIRECTION_MESSAGES
 
 ROOT = Path(__file__).resolve().parent
@@ -46,6 +49,8 @@ class Speech:
         self.playing = False
         self.generation = 0
         self.history = []
+        self.agent = NanoMuse() if os.getenv("AI_BACKEND", "qwen") == "nanomuse" else None
+        self.agent_cancel = None
         self.model = self.recognizer = None
         self.utterance = bytearray()
         self.partial = ""
@@ -71,6 +76,9 @@ class Speech:
 
     def connect(self, device_info=None):
         with self.lock:
+            self.cancel_agent()
+            if self.agent:
+                self.agent.reset_conversation()
             self.device_info = device_info or {}
             if self.aec:
                 self.aec.close()
@@ -107,6 +115,7 @@ class Speech:
             return {"online": online, "microphone": time.monotonic() - self.mic_seen < 2,
                     "mic_dbfs": self.mic_dbfs if online else None,
                     "awake": awake,
+                    "agent": self.agent.snapshot() if self.agent else {"provider": "qwen"},
                     "device": self.device_info,
                     "wake_error": self.wake_error,
                     "duplex": bool(self.aec), "aec_error": self.aec_error,
@@ -120,6 +129,8 @@ class Speech:
                 not (self.busy or self.playing or self.active or self.pending)):
             self.awake_until = 0
             self.history.clear()
+            if self.agent:
+                self.agent.reset_conversation()
             self.recognizer = None
             self.utterance.clear()
             self.partial = ""
@@ -156,6 +167,7 @@ class Speech:
                 if routine and (self.awake_until or self.busy or self.playing or self.active or self.pending):
                     return
                 self.generation += 1
+                self.cancel_agent()
                 self.busy = False
                 self.prompt(name, urgent=True)
 
@@ -281,14 +293,25 @@ class Speech:
                         self.interrupt()
                     self.handle(text, audio)
 
-    def interrupt(self):
+    def cancel_agent(self):
+        if self.agent_cancel:
+            self.agent_cancel.set()
+
+    def interrupt(self, force=False):
         self.barged = True
-        self.generation += 1
-        self.busy = self.playing = False
+        # Speaking an approval answer stops the prompt, but must keep its task alive.
+        approval = self.agent.snapshot().get("approval") if self.agent else None
+        answering = approval and not force
+        if not answering:
+            self.generation += 1
+            self.cancel_agent()
+            self.busy = False
+        self.playing = False
         self.active = None
         self.pending.clear()
         self.awake_until = time.monotonic() + IDLE_SECONDS
-        self.runtime.emit('dialog', '检测到插话，已停止当前回答')
+        self.runtime.emit('dialog', '正在听取确认回答' if answering else
+                          '检测到插话，已停止播报并请求取消任务' if self.agent else '检测到插话，已停止当前回答')
 
     def handle(self, text, pcm=b""):
         with self.lock:
@@ -305,10 +328,25 @@ class Speech:
             self.awake_until = time.monotonic() + IDLE_SECONDS
             self.runtime.emit("dialog", "你 · " + text)
             if text in {"结束对话", "退出对话"}:
+                self.cancel_agent()
+                if self.agent:
+                    self.agent.reset_conversation()
                 self.awake_until = 0
                 self.history.clear()
                 self.generation += 1
                 self.prompt("sleep", urgent=True)
+                return
+            approval = self.agent.snapshot().get("approval") if self.agent else None
+            if approval:
+                if text in {"确认执行", "允许执行", "同意执行", "取消执行", "拒绝执行"}:
+                    allow = text in {"确认执行", "允许执行", "同意执行"}
+                    threading.Thread(target=self._approve,
+                        args=(approval["approval_id"], allow, self.generation), daemon=True).start()
+                    return
+                # A different instruction cancels the old task rather than authorizing it.
+                self.interrupt(force=True)
+            if self.agent and text in {"停一下", "停止", "停止任务", "取消任务"}:
+                self.interrupt(force=True)
                 return
             command = re.sub(r'^(?:停一下|等一下|先停一下|Edith)[，,。\s]*', '', text)
             mode = MODE.fullmatch(command)
@@ -318,33 +356,94 @@ class Speech:
                 self.runtime.emit("dialog", "Edith · " + PROMPTS[target])
                 self.prompt(target)
                 return
-            frame = self.runtime.current_frame() if LOOK.match(text) else None
-            if LOOK.match(text) and frame is None:
+            look = LOOK.match(text) and not (self.agent and re.search(r"手机|屏幕|页面|app|应用", text, re.I))
+            frame = self.runtime.current_frame() if look else None
+            if look and frame is None:
                 self.runtime.emit("dialog", "Edith · 当前摄像头没有画面")
                 self.prompt("no_frame")
                 return
             self.busy = True
+            self.cancel_agent()
+            cancel = threading.Event()
+            self.agent_cancel = cancel
             generation = self.generation
             history = list(self.history)
-            threading.Thread(target=self._answer, args=(text, pcm, frame, history, generation), daemon=True).start()
+            threading.Thread(target=self._answer, args=(text, pcm, frame, history, generation, cancel), daemon=True).start()
 
-    def _answer(self, text, pcm, frame, history, generation):
+    def _approve(self, approval_id, allow, generation):
         try:
-            answer, wav = qwen.ask(text, history, frame, pcm or None)
+            with self.lock:
+                if generation != self.generation or (self.agent_cancel and self.agent_cancel.is_set()):
+                    return
+            ok = self.agent.approve(approval_id, allow)
+            message = "已确认本次操作" if ok and allow else "已拒绝本次操作" if ok else "确认已失效，请重新下达指令"
+        except Exception:
+            message = "确认未送达，请检查 nanoMuse 连接"
+        with self.lock:
+            if generation == self.generation:
+                self.runtime.emit("dialog", "Edith · " + message)
+
+    def _agent_event(self, event, generation):
+        with self.lock:
+            if generation != self.generation:
+                return
+            if time.monotonic() - self.seen > 5:
+                self.cancel_agent()
+                return
+            if event.get("stage") == "tool":
+                self.runtime.emit("agent", "nanoMuse 正在执行 · " + str(event.get("name", "任务")))
+            if event.get("stage") == "approval":
+                preview = str(event.get("preview", "当前操作"))[:250]
+                text = "nanoMuse 需要确认：" + preview + "。请说确认执行，或取消执行。"
+                self.runtime.emit("dialog", "Edith · " + text)
+                threading.Thread(target=self._approval_prompt,
+                    args=(text, event["approval_id"], generation), daemon=True).start()
+
+    def _approval_prompt(self, text, approval_id, generation):
+        try:
+            wav = tts.synthesize(text)
+            with self.lock:
+                approval = self.agent.snapshot().get("approval")
+                if generation == self.generation and approval and approval["approval_id"] == approval_id:
+                    self.enqueue(text, wav)
+        except Exception:
+            with self.lock:
+                if generation == self.generation:
+                    self.cancel_agent()
+                    self.runtime.emit("dialog", "确认提示播放失败，已请求取消任务")
+                    self.prompt("error")
+
+    def _answer(self, text, pcm, frame, history, generation, cancel=None):
+        try:
+            if self.agent:
+                cancel = cancel or threading.Event()
+                answer = self.agent.ask(text, frame, lambda event: self._agent_event(event, generation), cancel)
+                with self.lock:
+                    if generation != self.generation or cancel.is_set():
+                        return
+                    self.runtime.emit("dialog", "Edith · " + answer)
+                wav = tts.synthesize(answer)
+            else:
+                answer, wav = qwen.ask(text, history, frame, pcm or None)
             with self.lock:
                 if generation != self.generation or time.monotonic() - self.seen > 4:
                     return
                 self.history.extend([{"role": "user", "content": text},
                                      {"role": "assistant", "content": answer}])
                 self.history = self.history[-8:]
-                self.runtime.emit("dialog", "Edith · " + (answer or "语音回复"))
+                if not self.agent:
+                    self.runtime.emit("dialog", "Edith · " + (answer or "语音回复"))
                 self.enqueue(answer or "语音回复", wav)
                 self.awake_until = time.monotonic() + IDLE_SECONDS
+        except Cancelled:
+            pass
         except Exception as exc:
-            logging.warning("Qwen request failed (%s)", type(exc).__name__)
+            logging.warning("AI request failed (%s)", type(exc).__name__)
             with self.lock:
                 if generation == self.generation:
-                    self.runtime.emit("dialog", "千问请求失败，请检查网络和百炼配置")
+                    self.runtime.emit("dialog", str(exc) if isinstance(exc, NanoMuseError) else
+                                      "nanoMuse 或语音合成失败，请检查桌面端和百炼配置" if self.agent else
+                                      "千问请求失败，请检查网络和百炼配置")
                     self.prompt("error")
         finally:
             with self.lock:

@@ -71,6 +71,13 @@ function display(next) {
   const names = {offline:'设备离线', speaking:'正在播报', thinking:'正在思考', listening:'正在聆听', idle:'等待唤醒'};
   label('ai-state', !next.qwen ? '未配置千问' : names[phase], phase === 'listening' ? 'good' : '');
   label('ai-detail', phase === 'thinking' ? '正在生成语音回答' : phase === 'speaking' ? (audio.duplex ? '可以直接插话' : '请听完后再说') : '千问 · 北京地域');
+  const agent = audio.agent || {};
+  if (agent.provider === 'nanomuse') {
+    const states = {thinking:'正在思考', executing:'正在执行任务', awaiting_approval:'等待语音确认', cancelling:'正在取消任务', uncertain:'任务状态待核实', idle:'nanoMuse 已就绪'};
+    const phones = (agent.devices || []).filter(d=>d.kind==='phone' && d.online).length;
+    label('ai-state', agent.online ? (states[agent.phase] || 'nanoMuse 已连接') : 'nanoMuse 未连接', agent.online ? '' : 'warning');
+    label('ai-detail', agent.online ? `nanoMuse · ${agent.hub_connected ? phones + ' 台手机在线' : '设备互联未连接'}` : '请启动已启用眼镜接口的 nanoMuse');
+  }
   label('voice-title', names[phase]); el('presence').dataset.phase = phase;
   label('voice', phase === 'idle' ? '对眼镜说「嗨，Edith」' : phase === 'thinking' ? '正在理解你的问题…' : phase === 'speaking' ? (audio.duplex ? '想补充内容？直接开口就好' : '正在通过眼镜喇叭回答') : phase === 'listening' ? '我在，请说' : '眼镜重新连接后自动恢复');
   label('mic-label', audio.microphone ? '麦克风在线 · ' + audio.mic_dbfs + ' dBFS' : '未收到麦克风数据');
