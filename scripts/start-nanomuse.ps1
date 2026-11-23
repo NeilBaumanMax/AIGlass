@@ -21,5 +21,7 @@ $env:EDITH_BRIDGE_TOKEN_FILE = $tokenPath
 $env:NANOMUSE_DESKTOP_HOME = Join-Path $project '.local/nanomuse-desktop'
 # A dedicated profile preserves any separately installed nanoMuse desktop.
 # Electron is the interactive app the user signs in to; do not hide its window.
-Start-Process -FilePath $electron -ArgumentList @('"' + $desktop + '"') -WorkingDirectory $desktop
+$browserProfile = Join-Path $project '.local/nanomuse-browser'
+$process = Start-Process -FilePath $electron -ArgumentList @('"' + $desktop + '"', '--user-data-dir="' + $browserProfile + '"') -WorkingDirectory $desktop -PassThru
+if ($process.WaitForExit(1500)) { throw 'nanoMuse exited during launch; check the desktop log before continuing.' }
 Write-Output 'nanoMuse desktop launched. Sign in and bind the phone in the app.'

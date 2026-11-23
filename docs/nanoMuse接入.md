@@ -40,6 +40,8 @@ flowchart LR
 
 启动脚本生成 `.local/nanomuse-token`，并使用独立配置目录 `.local/nanomuse-desktop`。不要把这个目录或令牌提交到 Git。此版本从源码运行，不能用未修改的官方安装包代替，也没有发布自己的安装包。电脑本身的鼠标键盘操作还需要上游 Hands runtime；第一轮手机任务使用 nanoMuse 的手机端。
 
+浏览器缓存和单实例锁也通过 `.local/nanomuse-browser` 隔离，允许它与已有官方桌面安装并存；应在新打开的源码开发版窗口完成配置。开发机已实际启动此窗口，本机接口返回 protocol 1、未登录、Hub 未连接、设备列表为空。
+
 ## 账号与千问
 
 1. 在打开的 nanoMuse 桌面窗口登录。手机安装 [nanoMuse 官方客户端](https://github.com/nano-muse/nanoMuse/releases)，登录同一账号，在其设备页确认电脑和手机互相在线。
@@ -71,11 +73,14 @@ QWEN_TTS_VOICE=Cherry
 
 ```powershell
 python -m unittest discover -s tests -v
+python scripts/check-nanomuse.py
 $env:NANOMUSE_CHECKOUT = (Resolve-Path .tools/nanomuse).Path
 node --test tests/nanomuse-bridge.test.mjs
 ```
 
 接入测试验证本地 HTTP 鉴权、重复请求、状态持久化、定向取消、确认匹配以及重启后结果恢复，使用模拟任务，不会操作真实手机。上游插件另跑 build、typecheck 和完整测试。TTS 已用现有百炼密钥完成真实短句合成，24 kHz WAV 可读。
+
+`check-nanomuse.py` 只读接口连通性、登录/Hub 和在线手机数量，不输出设备名称、账号或令牌，不执行任何手机指令。检查成功不代表模型或手机操作已验证。
 
 真实验收顺序：nanoMuse 原生桌面能操作手机 → 切换后端 → 眼镜唤醒 → 打开指定 App → 读取实际页面 → 插话取消 → 语音确认 → 断网恢复。每一步同时检查桌面任务记录、手机真实界面、眼镜播报和网页状态，不能以模型说“完成”作为唯一证据。
 
