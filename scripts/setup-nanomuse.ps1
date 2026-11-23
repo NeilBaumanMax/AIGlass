@@ -4,7 +4,7 @@ $project = Split-Path $PSScriptRoot -Parent
 Set-Location $project
 $revision = '09850259cab00d27af83786f00faa09b5d8494bf'
 $checkout = [IO.Path]::GetFullPath($(if ([IO.Path]::IsPathRooted($Source)) { $Source } else { Join-Path $project $Source }))
-$python = @('.runtime/python.exe', '.venv/Scripts/python.exe') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+$python = @('.venv/Scripts/python.exe', '.runtime/python.exe') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if (-not $python) { $python = (Get-Command python -ErrorAction Stop).Source }
 $python = (Resolve-Path -LiteralPath $python).Path
 function Run([string]$Program, [string[]]$Arguments) {

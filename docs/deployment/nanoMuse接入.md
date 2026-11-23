@@ -25,14 +25,17 @@ flowchart LR
 
 ## Windows 11 安装与构建
 
-先完成 [4090 部署指南](Windows11完整部署.md) 中现有 Edith 环境，再安装 Node.js 22 或更新版本、pnpm、Git。开发机已使用 Node 24 验证编译。
+先完成 [完整部署指南](Windows11完整部署.md) 的第 2–5 节，再配置本节。开发机已验证 Node 24 和 pnpm 11.25.0。安装 Node 后在新 PowerShell 执行 `npm install --global pnpm@11.25.0`，用 `node --version`、`pnpm --version` 确认。
+
+首次完整部署先从 [nanoMuse 1.0.9 官方 Release](https://github.com/nano-muse/nanoMuse/releases/tag/v1.0.9) 安装 Windows x64 桌面版，再执行下方构建及“已有 nanoMuse 安装”流程；该流程同样适用于刚安装的人。官方安装包含电脑控制运行组件。源码桌面仅构建成功，不代表这些运行组件已完整配置。
 
 在 AIGlass 根目录运行：
 
 ```powershell
 ./scripts/setup-nanomuse.ps1
-./scripts/start-nanomuse.ps1
 ```
+
+上面只构建。完整电脑操作使用下面的 `-InstalledApp` 方式启动；仅做源码桥接开发时才用 `./scripts/start-nanomuse.ps1` 打开独立开发桌面。
 
 ### 已有 nanoMuse 安装与账号
 
@@ -57,7 +60,7 @@ flowchart LR
 
 ## 账号与千问
 
-1. 在打开的 nanoMuse 桌面窗口登录。手机安装 [nanoMuse 官方客户端](https://github.com/nano-muse/nanoMuse/releases)，登录同一账号，在其设备页确认电脑和手机互相在线。
+1. 在打开的 nanoMuse 桌面窗口登录。仅使用电脑不要求绑定手机；需要手机控制时再安装 [nanoMuse 官方客户端](https://github.com/nano-muse/nanoMuse/releases)，登录同一账号并确认双方在线。
 2. 在 nanoMuse 设置中添加自己的“阿里云百炼”密钥，地区选择中国内地，北京接口为 `https://dashscope.aliyuncs.com/compatible-mode/v1`。当前 AIGlass 的 `.env` 不会自动写入 nanoMuse 的凭据库。
 3. **明确选择千问作为聊天模型和看图/操作模型。** 上游该版本的百炼默认聊天模型是 DeepSeek，不能只添加百炼提供商就认为已经选中了千问。可从账号可用列表选择支持工具调用、并具备图像输入的千问模型。本机密钥已查询到 `qwen3.5-plus`、`qwen3-vl-plus` 和 `qwen3.8-27b`；查询列表不等于完成每个模型的工具联调。
 4. 手机自己的 nanoMuse 也需要选择千问。委派给手机的是任务，手机会使用它自己的模型设置，电脑的选择不会自动覆盖手机。

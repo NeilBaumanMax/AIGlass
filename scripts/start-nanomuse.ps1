@@ -5,7 +5,7 @@ Set-Location $project
 $checkout = if ($InstalledApp) { '' } else { (Resolve-Path -LiteralPath $Source).Path }
 $desktop = if ($InstalledApp) { (Resolve-Path -LiteralPath $InstalledApp).Path } else { Join-Path $checkout 'harness/desktop' }
 $electron = if ($InstalledApp) { Join-Path $desktop 'nanomuse-desktop.exe' } else { Join-Path $desktop 'node_modules/electron/dist/electron.exe' }
-if (-not (Test-Path -LiteralPath $electron)) { throw 'Build nanoMuse first; see docs/nanoMuse接入.md' }
+if (-not (Test-Path -LiteralPath $electron)) { throw 'Build nanoMuse first; see docs/deployment/nanoMuse接入.md' }
 $plugin = if ($InstalledApp) { 'resources/dsh/node_modules/dsh-nanomuse/lib/edith-bridge.js' } else { 'dsh/node_modules/dsh-nanomuse/lib/edith-bridge.js' }
 if (-not (Test-Path -LiteralPath (Join-Path $desktop $plugin))) {
     throw 'The desktop does not contain the Edith bridge. Run setup-nanomuse.ps1.'
@@ -36,4 +36,4 @@ if ($InstalledApp) {
     $process = Start-Process -FilePath $electron -ArgumentList @('"' + $desktop + '"', '--user-data-dir="' + $browserProfile + '"') -WorkingDirectory $desktop -PassThru
 }
 if ($process.WaitForExit(1500)) { throw 'nanoMuse exited during launch; check the desktop log before continuing.' }
-Write-Output 'nanoMuse desktop launched. Sign in and bind the phone in the app.'
+Write-Output 'nanoMuse desktop launched. Sign in, select Qwen, and verify desktop tools. Bind a phone only when needed.'

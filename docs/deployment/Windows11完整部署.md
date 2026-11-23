@@ -1,10 +1,28 @@
-# Edith 部署指南 · Windows 11 + RTX 4090
+# 从 GitHub 部署完整 Edith 后端 · Windows 11
 
-当前电脑仅用于开发和联调。开发完成后，电脑后端迁移到另一台 **Windows 11 x64 + NVIDIA RTX 4090** 电脑，眼镜继续使用 Pico Zero Linux 板。
+本指南面向第一次拿到仓库的人，从空目录开始，在自己的 **Windows 11 x64 + NVIDIA CUDA 显卡**电脑上安装完整后端。RTX 4090 是项目计划的目标机器；目前开发机验证使用 RTX 4060 Laptop。其他显卡按实际 CUDA 检查和推理测试验收，不承诺帧率。完整路径包括网页、视觉、唤醒/ASR、AEC、语音播放、nanoMuse 电脑工具与千问。
 
 这份指南对应当前仓库代码，会随开发更新。**目前没有在目标 4090 电脑完成部署验收，也没有完成 IMX415 实拍验收。** 开发机的性能数字不能当作 4090 的性能承诺。已验证项目与待验收项目见[施工记录](../development/施工记录.md)。
 
-需要 nanoMuse 统一 AI 和操作手机时，先完成本指南的基础环境，再按 [nanoMuse 接入指南](nanoMuse接入.md) 构建桌面接入层、配置千问、登录并绑定手机。眼镜端继续使用现有 Linux 客户端。下面的直连千问流程保留用于分步验收。
+完整 AI 使用 `AI_BACKEND=nanomuse`；第 6 节包含桌面端接入。模板默认的 `qwen` 用于基础对话联调，不具备电脑/手机执行工具。没有眼镜时可以完成电脑软件部署和模型检查；麦克风、喇叭、摄像头验收需要相应硬件，网页不提供输入替代。
+
+## 快速安装路线
+
+先按第 2 节准备 Python 3.11 x64、Git、NVIDIA 驱动与 Windows 中文 Huihui 语音，然后运行：
+
+```powershell
+git clone --recurse-submodules https://github.com/NeilBaumanMax/AIGlass.git
+Set-Location AIGlass
+Set-ExecutionPolicy -Scope Process RemoteSigned
+.\scripts\setup-backend.ps1
+notepad .env
+```
+
+脚本完成第 3–5 节的电脑环境与素材安装，不启动后端、不修改板子、不填写密钥、不自动登录 nanoMuse。然后继续 **第 6 节配置 AI → 第 7 节检查 → 第 8–9 节联网与启动 → 第 10 节验收**。如果只部署电脑后端，可以暂缓 ADB/板端步骤，网页会显示设备离线。
+
+安装会下载 PyTorch、模型和工具，需保持互联网可用。失败后修复网络或组件再重试；脚本不会覆盖已有 `.env`。可用 `-Stage Environment` 只安装 Python 环境，用 `-Stage Assets` 只安装模型/提示音，用 `-Plan` 查看计划。Python 未注册到 `py` 时指定 `-PythonPath 'C:\实际路径\python.exe'`；必须是完整 Python 3.11 x64，不能使用嵌入版替代 venv 安装器。
+
+第 3–5 节保留逐步安装命令便于排错；快速脚本成功后不用再重复下载。运行时新部署统一使用 `.venv`。
 
 ## 1. 部署后的设备关系
 
@@ -27,13 +45,15 @@ Pico Zero · Buildroot Linux                    Windows 11 · RTX 4090
 | 项目 | 本指南使用的基线 |
 | --- | --- |
 | 系统 | Windows 11，x64 |
-| 显卡 | RTX 4090；安装支持 CUDA 12.6 的 NVIDIA Windows 驱动 |
+| 显卡 | NVIDIA CUDA 显卡；驱动支持 CUDA 12.6；目标 RTX 4090 |
 | Python | **3.11 x64**；开发机验证版本为 3.11.9 |
 | PyTorch | **2.6.0 + CUDA 12.6（cu126）** |
 | 其余 Python 依赖 | 仓库 `requirements.txt` 中固定的已验证版本 |
 | 命令行工具 | Git for Windows、PowerShell、Windows `tar` |
 | 本地提示音 | Windows SAPI 中文 **Huihui** 语音 |
 | 板子部署 | Android SDK Platform-Tools 中的 `adb.exe` |
+| nanoMuse 构建 | Node.js 24、pnpm 11.25.0、Git；桌面接入固定 1.0.9 |
+| 模型账号 | 自己的百炼北京 API Key，支持所选千问聊天/视觉模型与 TTS；nanoMuse 登录账号 |
 
 当前完整音频链路依赖 Windows SpeexDSP DLL 和 SAPI；这不是 Ubuntu/WSL 的部署指南。代码仍使用 `audioop`，按 Python 3.11 安装，不直接换成 Python 3.13 或更高版本。
 
@@ -127,7 +147,7 @@ $speaker.GetVoices() | ForEach-Object { $_.GetDescription() }
 
 脚本将当前代码中的“我在，请说”、模式切换、退出、视觉方向、断流与恢复等 19 条提示语生成到 `.local/prompts/*.wav`。如果没有 Huihui，安装 Windows 中文语音组件后重新确认；也可以复制同一代码版本在开发机生成的整个 `.local/prompts` 目录，再运行预检。仅有模型而没有提示音时，设备可能识别成功却没有可播放的本地应答。更新提示音后正常重启后端才能加载。
 
-## 6. 配置千问北京地域
+## 6. 配置完整 AI：nanoMuse + 千问北京地域
 
 只在首次部署、尚无 `.env` 时复制模板：
 
@@ -140,13 +160,55 @@ notepad .env
 
 ```dotenv
 DASHSCOPE_API_KEY=填写你自己的北京地域密钥
-QWEN_MODEL=qwen3-omni-flash
-DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+AI_BACKEND=nanomuse
+NANOMUSE_BRIDGE_URL=http://127.0.0.1:18765
+QWEN_TTS_MODEL=qwen3-tts-flash
+QWEN_TTS_VOICE=Cherry
 ```
 
 密钥留在 4090 电脑本地，不放到板子、不提交 GitHub。还需要该模型访问权限、可用额度及互联网连接。后端重启后读取配置；已存在的同名进程环境变量优先于 `.env`。
 
-普通提问发送语音和本地指令文字；明确说“看看当前画面”时发送文字和当前新鲜图像。未唤醒音频仅在电脑本地处理。[百炼 Qwen-Omni 接口说明](https://help.aliyun.com/zh/model-studio/qwen-omni)
+### 6.1 安装桌面运行组件与桥接
+
+1. 从 [nanoMuse 1.0.9 官方 Release](https://github.com/nano-muse/nanoMuse/releases/tag/v1.0.9) 安装 Windows x64 桌面版。它提供本项目已验证的电脑控制运行组件。记下 `nanomuse-desktop.exe` 所在目录；未知新版本不能直接套用本版插件。
+2. 安装 [Node.js](https://nodejs.org/en/download) 24，打开新 PowerShell，安装本项目使用的 pnpm，然后构建桥接。
+
+```powershell
+node --version
+npm install --global pnpm@11.25.0
+pnpm --version
+.\scripts\setup-nanomuse.ps1
+```
+
+脚本下载固定版本源码到 `.tools/nanomuse`，构建并测试插件和桌面资源。需要代理时按自己的网络追加 `-Proxy http://127.0.0.1:实际端口`。配置、账号和源码均在本机，不随 Git 发布。
+
+3. 从 nanoMuse 的菜单或托盘**正常退出**，然后安装桥接并重新打开。将示例目录替换为实际安装目录，不是快捷方式所在目录：
+
+```powershell
+$NanoMuseApp = 'C:\Apps\nanoMuse' # 其中必须存在 nanomuse-desktop.exe
+.\scripts\install-nanomuse-bridge.ps1 -AppRoot $NanoMuseApp
+.\scripts\start-nanomuse.ps1 -InstalledApp $NanoMuseApp
+```
+
+安装脚本先验证插件/依赖版本并备份，再更新桥接；不覆盖账号、历史和绑定。**日常也用这个启动脚本**；普通官方快捷方式不会启用眼镜接口。源码桌面可用于桥接开发，但只构建源码不代表电脑鼠标键盘运行组件已齐全，完整电脑操作部署使用上述官方安装路径。
+
+### 6.2 登录、选择模型与检查
+
+在 nanoMuse 桌面登录自己的账号，添加百炼北京密钥，明确选择支持图像输入和工具调用的千问模型。开发机验证使用 `qwen3.5-plus`；以自己的账号授权为准。上游默认百炼聊天模型可能是 DeepSeek，添加供应商后仍需选中千问。`.env` 中的 Key 用于 Edith 语音服务，**不会自动配置 nanoMuse 的模型凭据**，两处都需配置。
+
+```powershell
+.\.venv\Scripts\python.exe scripts/check-nanomuse.py
+```
+
+应显示 `desktop_bridge: online`、`protocol: 1`、`signed_in: true`。手机暂不使用时 `online_phones: 0` 正常。先在 nanoMuse 内验证“看看电脑屏幕”与“打开记事本”，取屏核实工具结果；接口在线不代表模型权限或动作成功。手机控制再安装官方手机端、登录同一账号、配置千问并完成其权限检查。
+
+AI 任务和看图由 nanoMuse 处理，千问 TTS 朗读实际结果；本地唤醒和 WalkGuide 不依赖云端对话。完整协议、确认、升级/回退、已有账号处理见 [nanoMuse 接入](nanoMuse接入.md)。
+
+### 6.3 可选：先验证基础对话
+
+如果暂不安装 nanoMuse，将 `.env` 设为 `AI_BACKEND=qwen`，并保留 `QWEN_MODEL=qwen3-omni-flash`、`DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`。该模式有视觉、唤醒、语音对话与主动看眼前画面，**没有电脑或手机工具**，不是完整 Agent 验收。
+
+直连模式普通提问使用语音和本地指令文字，看图使用文字和当前图片，不同时上传图片和音频。未唤醒音频仅在电脑本地处理。[百炼 Qwen-Omni 接口说明](https://help.aliyun.com/zh/model-studio/qwen-omni)
 
 ## 7. 先验证电脑环境
 
@@ -154,9 +216,11 @@ DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 .\.venv\Scripts\python.exe scripts/check-env.py
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 .\.venv\Scripts\python.exe scripts/check-vision.py
+.\.venv\Scripts\python.exe scripts/check-guidance.py
+.\.venv\Scripts\python.exe scripts/check-docs.py
 ```
 
-`check-env.py` 只读检查 Python、依赖、CUDA 运算、子模块版本、视觉权重、唤醒/ASR/AEC 加载、本地提示音及密钥是否已填；不输出密钥，不连接千问，不修改板子。最终应显示 `READY for device tests`。这不代表云端鉴权、额度和实机音频已经通过。
+`check-env.py` 只读检查 Python、依赖、CUDA 运算、子模块版本、视觉权重、唤醒/ASR/AEC、本地提示音、密钥是否已填和 AI 后端选择。选择 nanoMuse 时还读取本机接口并核对登录；不执行电脑/手机动作、不输出密钥、不连接千问或修改板子。最终应显示 `READY for device tests`。这不代表云端鉴权、额度、实际工具或实机音频已经通过。
 
 `check-vision.py` 实际加载模型，在室内/室外及三种尺寸上推理，检查方向输出、初始化测试图不外泄和断流清除。其输入是生成测试图，不是实景准确率测试，也不会替换正式服务的摄像头来源。
 
@@ -221,7 +285,7 @@ New-NetFirewallRule -DisplayName 'Edith LAN demo' -Direction Inbound -Action All
 .\start.ps1
 ```
 
-它在 `0.0.0.0:7860` 监听，首次生成新的 `.local/device-token`。新电脑使用刚创建的 `.venv`；启动脚本仅为兼容开发环境保留 `.runtime` 优先查找，不要迁移旧 `.runtime`。首次模型加载和 CUDA 预热期间，网页会显示加载中。
+它在 `0.0.0.0:7860` 监听，首次生成新的 `.local/device-token`。启动脚本优先选择 `.venv`，仅在没有 `.venv` 时兼容开发机的 `.runtime`，不要迁移旧环境。首次模型加载和 CUDA 预热期间，网页会显示加载中。完整模式应先从第 6 节脚本启动 nanoMuse，再启动后端。
 
 保持该窗口运行，在第二个 PowerShell 窗口进入相同项目根目录：
 
@@ -273,6 +337,8 @@ $ServerIp = '192.168.137.1' # 替换为这台 4090 电脑的局域网 IPv4
 | 联网 | 网页显示实际设备 IP、Linux、心跳；麦克风持续在线 |
 | 唤醒 | 正常音量说“嗨，Edith”，听到“我在，请说” |
 | 对话 | 提问后有喇叭回答，网页显示用户与 Edith 的真实对话 |
+| 电脑工具 | nanoMuse 取屏、打开空白记事本、输入测试文字，眼镜读出实际内容 |
+| Agent 确认/取消 | 只批准当前任务；插话后核对任务终态，不凭模型回复判定取消成功 |
 | 连续对话 | 播报结束后保持安静约 8 秒，听到“对话结束” |
 | 插话 | AI 播报时说“停一下，切换室外模式”，播报停下且新指令被执行 |
 | 模式 | 室内/室外语音切换与网页状态、分割结果同步 |
@@ -306,6 +372,8 @@ Invoke-RestMethod http://127.0.0.1:7860/api/status
 | 设备 HTTP 401 | 新服务器令牌与板端不一致，重新执行部署脚本 |
 | 超时/麦克风离线 | 服务器 IP、热点/路由器、端口、防火墙、AP 隔离和板端日志 |
 | 千问失败 | `.env`、北京地域和模型权限、额度、互联网连接；配置存在不等于鉴权成功 |
+| nanoMuse 接口离线 | 是否通过带 `-InstalledApp` 的脚本启动、是否已装匹配插件、令牌文件是否存在 |
+| 能聊天但不能操作电脑 | 是否 `AI_BACKEND=nanomuse`、模型支持工具/图像、官方桌面的电脑控制组件是否完整 |
 | 无摄像头画面 | 先验证实际 RTSP 出流，再检查电脑源地址；不要用测试图冒充实拍 |
 
 | 内容 | 迁移方式 |

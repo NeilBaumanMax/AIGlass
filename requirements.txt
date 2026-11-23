@@ -1,5 +1,5 @@
 # Validated application dependencies on Windows 11 / Python 3.11.
-# Install torch from the CUDA 12.6 index first; see docs/部署指南-Windows11-RTX4090.md.
+# Install torch from the CUDA 12.6 index first; see docs/deployment/Windows11完整部署.md.
 # The server uses headless OpenCV. Do not install both OpenCV distributions.
 Flask==3.1.3
 numpy==2.2.6
