@@ -356,7 +356,9 @@ class Speech:
                 self.runtime.emit("dialog", "Edith · " + PROMPTS[target])
                 self.prompt(target)
                 return
-            look = LOOK.match(text) and not (self.agent and re.search(r"手机|屏幕|页面|app|应用", text, re.I))
+            remote_view = re.search(r"手机|电脑|屏幕|显示器|桌面|页面|app|应用", text, re.I)
+            camera_view = re.search(r"眼前|摄像头|眼镜.*画面", text)
+            look = LOOK.match(text) and not (self.agent and remote_view and not camera_view)
             frame = self.runtime.current_frame() if look else None
             if look and frame is None:
                 self.runtime.emit("dialog", "Edith · 当前摄像头没有画面")

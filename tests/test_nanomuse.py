@@ -119,6 +119,15 @@ class NanoMuseSpeechTests(unittest.TestCase):
         self.assertIsNone(args[2])
         self.assertNotIn('当前摄像头没有画面', [item['text'] for item in self.speech.pending])
 
+    def test_computer_view_is_distinct_from_camera_view(self):
+        with patch('speech.threading.Thread') as thread:
+            self.speech.handle('看看电脑')
+        self.assertIsNone(thread.call_args.kwargs['args'][2])
+        self.runtime.current_frame = Mock(return_value=b'fresh-camera-jpeg')
+        with patch('speech.threading.Thread') as thread:
+            self.speech.handle('看看眼前的电脑')
+        self.assertEqual(thread.call_args.kwargs['args'][2], b'fresh-camera-jpeg')
+
     def test_nanomuse_answer_uses_tts_without_direct_chat(self):
         self.agent.ask.return_value = '手机页面的实际结果'
         with patch('qwen.ask') as direct, patch('tts.synthesize', return_value=b'wav') as synth:

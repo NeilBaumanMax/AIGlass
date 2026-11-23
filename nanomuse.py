@@ -136,6 +136,8 @@ class NanoMuse:
             request = {**identity, "new_conversation": identity["conversation"] not in self.known_conversations,
                 "text": "你正通过 Edith 眼镜与用户对话。用简短中文回答，通常不超过 150 字。"
                         "用户要求操作手机时，先查看 nanoMuse 设备列表，再委派给手机。"
+                        "用户要求看电脑屏幕时使用 computer_screen，不能把读取文件当成取屏。"
+                        "在 Windows 打开桌面应用优先用 computer_act 的 open_app；用实际屏幕确认窗口，shell 命令成功不等于窗口已显示。"
                         "没有执行结果时不能声称完成。不要推断摄像头外的环境或保证通行安全。"
                         "以下是用户原话：\n" + text}
             if frame:
