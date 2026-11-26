@@ -26,6 +26,7 @@ class RuntimeTests(unittest.TestCase):
 
         class FakeVision:
             device = "test"
+            analysis = {'guidance_kind': 'obstacle_left', 'guidance_reason': 'synthetic left route'}
 
             def analyze(self, image, mode):
                 calls.append(mode)
@@ -47,6 +48,8 @@ class RuntimeTests(unittest.TestCase):
                 time.sleep(.05)
                 self.assertEqual(len(calls), 4)
                 self.assertEqual(len(runtime.snapshot()["events"]), 1)
+                self.assertEqual(runtime.guidance.stable, 'obstacle_left')
+                self.assertEqual(runtime.snapshot()['guidance']['reason'], 'synthetic left route')
                 runtime.set_mode("outdoor")
                 deadline = time.monotonic() + 2
                 while calls[-1] != "outdoor" and time.monotonic() < deadline:

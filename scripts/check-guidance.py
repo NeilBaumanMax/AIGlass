@@ -21,9 +21,11 @@ from backend.runtime import Runtime
 from backend.speech import Speech
 
 SCENES = [
-    (0, 12, None), (12, 20, 'left'), (20, 34, 'obstacle'),
-    (34, 38, 'stairs'), (38, 43, 'stop'), (43, 47, None), (47, 57, 'right'),
+    (0, 12, None), (12, 20, 'left'), (20, 38, 'obstacle'),
+    (38, 42, 'stairs'), (42, 77, 'stop'), (77, 86, 'scan_left'),
+    (86, 90, None), (90, 100, 'right'), (100, 110, 'straight'),
 ]
+END_SECONDS = SCENES[-1][1]
 RATE = 16000
 
 
@@ -73,7 +75,7 @@ def run():
             return result
 
         runtime.on_alert = deliver
-        for tick in range(571):
+        for tick in range(END_SECONDS * 10 + 1):
             elapsed = tick / 10
             clock[0] = 100 + elapsed
             if tick == 180:
@@ -107,20 +109,24 @@ def run():
                     current = {'id': command['id'], 'start': elapsed,
                                'end': elapsed + len(pcm) / (RATE * 2), 'pcm': pcm, 'record': record}
         if current:
-            seconds = min(57, current['end']) - current['start']
+            seconds = min(END_SECONDS, current['end']) - current['start']
             clips.append(current['pcm'][:round(seconds * RATE) * 2])
-            current['record'].update(played_seconds=round(seconds, 2), interrupted=57 < current['end'])
+            current['record'].update(played_seconds=round(seconds, 2), interrupted=END_SECONDS < current['end'])
 
     accepted = [item for item in attempts if item['result'] == 'accepted']
     kinds = [item['kind'] for item in accepted]
     assert kinds == ['waiting', 'restored', 'left', 'obstacle', 'obstacle', 'stairs',
-                     'stop', 'lost', 'restored', 'right'], kinds
+                     'stop', 'stop', 'scan_left', 'lost', 'restored', 'right', 'straight'], kinds
     assert 20.2 <= interrupted_at < 21, interrupted_at
     obstacles = [item for item in accepted if item['kind'] == 'obstacle']
     assert obstacles[1]['at'] - obstacles[0]['at'] >= 8
     assert obstacles[1]['repeated'] and not obstacles[1]['interrupts']
     assert any(item['kind'] == 'obstacle' and item['result'] == 'deferred' for item in attempts)
-    assert not any(item['kind'] in {'left', 'right'} and 18 <= item['at'] < 47 for item in accepted)
+    assert not any(item['kind'] in {'left', 'right'} and 18 <= item['at'] < 90 for item in accepted)
+    stops = [item for item in accepted if item['kind'] == 'stop']
+    assert stops[1]['at'] - stops[0]['at'] >= 30
+    scan = next(item for item in accepted if item['kind'] == 'scan_left')
+    assert scan['repeated'] and not scan['interrupts']
     assert not runtime.snapshot()['video_online'] and runtime.snapshot()['frame'] is None
 
     args.output.mkdir(parents=True, exist_ok=True)
@@ -131,7 +137,7 @@ def run():
         output.writeframes((b'\0' * round(.45 * RATE) * 2).join([intro] + clips))
     report = {'input': 'SIMULATION ONLY: scripted recognition labels; no camera evidence',
               'playback': 'local scheduler with simulated device acknowledgements, not a speaker test',
-              'preview': 'preview.wav has compressed gaps; report times use the 57-second logical clock',
+              'preview': f'preview.wav has compressed gaps; report times use the {END_SECONDS}-second logical clock',
               'scenes': [{'start': start, 'end': end, 'kind': kind} for start, end, kind in SCENES],
               'fresh_seconds': FRESH_SECONDS, 'cues': {key: vars(cue) for key, cue in CUES.items()},
               'simulated_ai_started_at': 18, 'simulated_ai_cancelled_at': interrupted_at,

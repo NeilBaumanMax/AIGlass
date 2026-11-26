@@ -152,7 +152,7 @@ class NanoMuseSpeechTests(unittest.TestCase):
     def test_urgent_walkguide_alert_cancels_phone_task(self):
         self.speech.alert('前方有障碍')
         self.assertTrue(self.speech.agent_cancel.is_set())
-        self.assertEqual(self.speech.active['text'], '前方有障碍')
+        self.assertEqual(self.speech.active['text'], PROMPTS['obstacle'])
 
     def test_microphone_disconnect_requests_cancel(self):
         self.speech.seen = time.monotonic() - 6

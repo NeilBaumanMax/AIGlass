@@ -2,6 +2,7 @@ from pathlib import Path
 import sys
 
 from .paths import ROOT
+from .scene_cues import describe_scene
 UPSTREAM = ROOT / "vendor" / "walkguide"
 sys.path.insert(0, str(UPSTREAM))
 
@@ -68,12 +69,11 @@ class Vision:
         overlay, direction = render_guidance(render_regions(image, floor, obstacles, stairs), floor)
 
         # Prototype image-space thresholds. They do not estimate physical clearance.
-        h, w = floor.shape
-        center = (slice(h * 55 // 100, h * 95 // 100), slice(w // 3, 2 * w // 3))
+        scene = describe_scene(floor, obstacles, stairs, direction)
         event = DIRECTION_MESSAGES[direction]
-        if stairs is not None and stairs[center].mean() >= 0.08:
+        if scene['kind'] == 'stairs':
             event = "前方疑似台阶"
-        elif obstacles[center].mean() >= 0.15:
+        elif scene['kind'].startswith('obstacle'):
             event = "前方有障碍"
         self.analysis = {
             'floor': round(float(floor.mean()) * 100, 1),
@@ -82,5 +82,7 @@ class Vision:
             'direction': direction,
             'direction_message': DIRECTION_MESSAGES[direction],
             'message': event,
+            'guidance_kind': scene['kind'],
+            'guidance_reason': scene['reason'],
         }
         return overlay, event

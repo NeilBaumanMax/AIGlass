@@ -213,7 +213,9 @@ class Runtime:
                     self.latency = round((time.monotonic() - started) * 1000)
                     self.error = ""
                     self.engine_state = "ready"
-                    self.guidance.observe(MESSAGE_KINDS.get(event, 'unclear'), seq, when)
+                    analysis = pair['analysis'] or {}
+                    self.guidance.observe(analysis.get('guidance_kind') or MESSAGE_KINDS.get(event, 'unclear'),
+                                          seq, when, reason=analysis.get('guidance_reason'))
             except Exception:
                 logging.exception("Video inference failed")
                 with self.lock:

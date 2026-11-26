@@ -140,6 +140,59 @@ class PolicyTests(unittest.TestCase):
         self.assertFalse(self.policy.valid(alert, 8.7))
         self.assertEqual(self.accepted(11.2).kind, 'error')
 
+    def test_unknown_scene_does_not_repeat_every_eight_seconds(self):
+        self.feed('stop', [0, .2, .4, .6, .8])
+        self.accepted(.8)
+        for now in range(1, 30):
+            self.feed('stop', [now])
+            self.assertIsNone(self.policy.next_alert(now))
+        self.feed('stop', [30, 30.9])
+        self.assertTrue(self.accepted(30.9).repeated)
+
+    def test_uncertain_variants_share_cooldown_and_never_reinterrupt(self):
+        self.feed('stop', [0, .2, .4, .6, .8])
+        self.accepted(.8)
+        self.feed('unclear', [1, 1.3, 1.6, 1.9, 2.2])
+        self.assertIsNone(self.policy.next_alert(2.2))
+        self.feed('scan_left', [2.5, 3, 3.5])
+        self.assertIsNone(self.policy.next_alert(3.5))
+        self.feed('scan_left', [4, 5, 6, 6.9])
+        alert = self.accepted(6.9)
+        self.assertEqual(alert.kind, 'scan_left')
+        self.assertTrue(alert.repeated)
+        self.assertFalse(alert.interrupts)
+
+    def test_confirmed_route_after_unknown_is_not_held_by_unknown_cooldown(self):
+        self.feed('stop', [0, .2, .4, .6, .8])
+        self.accepted(.8)
+        self.feed('left', [1, 1.4, 2.1, 3, 4, 4.9])
+        self.assertEqual(self.accepted(4.9).kind, 'left')
+        self.feed('stop', [5, 5.2, 5.4, 5.6, 5.8])
+        self.assertFalse(self.accepted(5.8).repeated)
+
+    def test_changed_direction_is_announced_without_waiting_for_repeat_timer(self):
+        self.feed('left', [0, .3, .6])
+        self.accepted(.6)
+        self.feed('right', [1, 1.3, 1.6, 2.6, 3.6, 4.7])
+        self.assertEqual(self.accepted(4.7).kind, 'right')
+        self.feed('left', [5, 5.3, 5.6, 6.6, 7.6, 8.8])
+        self.assertEqual(self.accepted(8.8).kind, 'left')
+
+    def test_flickering_green_never_overrides_confirmed_unknown(self):
+        self.feed('stop', [0, .2, .4, .6, .8])
+        self.accepted(.8)
+        for i in range(1, 20):
+            self.feed('left' if i % 2 else 'stop', [.8 + i * .1])
+        self.assertEqual(self.policy.stable, 'stop')
+        self.assertIsNone(self.policy.next_alert(2.7))
+
+    def test_side_observation_is_revoked_as_soon_as_side_changes(self):
+        self.feed('scan_left', [0, .4, .8])
+        alert = self.accepted(.8)
+        self.feed('scan_right', [1])
+        self.assertFalse(self.policy.valid(alert, 1))
+        self.assertFalse(self.policy.valid(alert, 1, playing=True))
+
 
 class SpeechGuidanceTests(unittest.TestCase):
     def setUp(self):
@@ -189,6 +242,18 @@ class SpeechGuidanceTests(unittest.TestCase):
         self.seq += 1
         self.runtime.guidance.observe('obstacle', self.seq, 108.3, 108.3)
         self.dispatch(108.3)
+        self.assertFalse(self.speech.agent_cancel.is_set())
+        self.assertEqual(self.runtime.guidance.delivery, 'deferred')
+
+    def test_new_side_of_same_obstacle_does_not_cancel_agent_again(self):
+        self.dispatch(self.feed('obstacle_left'))
+        self.speech.active = None
+        self.speech.busy = True
+        self.speech.agent_cancel = threading.Event()
+        for when in range(101, 108):
+            self.seq += 1
+            self.runtime.guidance.observe('obstacle_right', self.seq, when, when)
+        self.dispatch(107)
         self.assertFalse(self.speech.agent_cancel.is_set())
         self.assertEqual(self.runtime.guidance.delivery, 'deferred')
 

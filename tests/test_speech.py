@@ -35,7 +35,7 @@ class SpeechTests(unittest.TestCase):
         self.speech.alert("前方有障碍")
         second = self.speech.poll(self.session, False, first["id"])
         self.assertNotEqual(first["id"], second["id"])
-        self.assertEqual(second["text"], "前方有障碍")
+        self.assertEqual(second["text"], CUES['obstacle'].text)
         self.assertIsNone(self.speech.poll(self.session, False, second["id"]))
 
     def test_reconnect_invalidates_old_session(self):
@@ -101,7 +101,7 @@ class SpeechTests(unittest.TestCase):
             self.speech._answer("问题", b"", None, [], generation)
         self.assertFalse(self.speech.history)
         self.assertFalse(self.speech.pending)
-        self.assertEqual(self.speech.active["text"], "前方有障碍")
+        self.assertEqual(self.speech.active["text"], CUES['obstacle'].text)
         self.assertFalse(self.speech.busy)
 
     def test_eight_second_idle_timeout_starts_after_playback(self):
