@@ -1,0 +1,61 @@
+#!/bin/sh
+# Boot services do not inherit the interactive ADB shell's library search path.
+export LD_LIBRARY_PATH=/oem/usr/lib:/oem/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+PID=/var/run/aiglass-camera.pid
+APP=/oem/usr/bin/rkipc
+PROFILE=/userdata/aiglass/camera.ini
+LOG=/tmp/aiglass-camera.log
+
+owned_running() {
+    test -f "$PID" || return 1
+    camera_pid=$(cat "$PID")
+    case "$camera_pid" in ''|*[!0-9]*) return 1 ;; esac
+    test "$(readlink /proc/$camera_pid/exe)" = "$APP" || return 1
+    tr '\000' '\n' < /proc/$camera_pid/cmdline | grep -Fxq "$PROFILE"
+}
+
+case "$1" in
+    start)
+        if owned_running; then echo 'Camera service already running'; exit 0; fi
+        if pidof rkipc >/dev/null; then
+            echo 'Another RKIPC instance is running; inspect it before starting Edith video' >&2
+            exit 1
+        fi
+        test -x "$APP" && test -s "$PROFILE" || exit 1
+        if ! cat /sys/class/video4linux/v4l-subdev*/name 2>/dev/null | grep -q imx415; then
+            echo 'IMX415 sensor is not bound' >&2
+            exit 1
+        fi
+        nohup "$APP" -c "$PROFILE" -a /oem/usr/share/iqfiles -l 1 >"$LOG" 2>&1 </dev/null &
+        echo $! > "$PID"
+        for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            sleep 1
+            owned_running || { echo "Camera startup failed; inspect $LOG" >&2; exit 1; }
+            netstat -lnt 2>/dev/null | grep -q ':554 ' && exit 0
+        done
+        echo "Camera has no RTSP listener; inspect $LOG" >&2
+        exit 1
+        ;;
+    stop)
+        if owned_running; then
+            kill -TERM "$camera_pid"
+            # RKIPC tears down ISP and networking asynchronously on this image.
+            for attempt in $(seq 1 30); do
+                owned_running || break
+                sleep 1
+            done
+            owned_running && { echo 'Camera did not stop' >&2; exit 1; }
+        fi
+        rm -f "$PID"
+        ;;
+    restart)
+        "$0" stop || exit 1
+        "$0" start
+        ;;
+    status)
+        owned_running && echo 'Camera service running' && exit 0
+        echo 'Camera service stopped'
+        exit 1
+        ;;
+    *) echo 'Usage: S97aiglass-camera start|stop|restart|status' >&2; exit 1 ;;
+esac

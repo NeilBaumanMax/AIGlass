@@ -320,13 +320,33 @@ $ServerIp = '192.168.137.1' # 替换为这台 4090 电脑的局域网 IPv4
 .\.tools\platform-tools\adb.exe reboot
 ```
 
-这是针对开发现场的兼容选项，不是所有网络都必须关闭 Wi-Fi 6。开发现场仅完成临时参数与 5 分钟实际音频观察；持久化工具已有自动测试，尚待实际重启验收。不要把这段记录当成 4090 电脑的验收结果。
+这是针对开发现场的兼容选项，不是所有网络都必须关闭 Wi-Fi 6。2026-11-26 已在板子重启后确认 `he_on=N`，同时开启实际视频与双向音频，60 秒、1149 次状态采样未出现离线。此前临时参数曾通过 5 分钟音频观察；这些有限观察不代表长期稳定性或另一台 4090 电脑验收。
 
 ## 10. 摄像头接入与完整验收
 
 摄像头是 **IMX415-98 IR-CUT Camera**，通过 CSI 连接，不占 USB。断电安装并核对排线方向，再按照 [Pico Zero CSI 官方说明](https://wiki.luckfox.com/zh/Luckfox-Pico-Zero/CSI-Camera/)核对系统支持、驱动、IQ/ISP 配置、rkipc 服务和实际出流地址。
 
-当前板子发现过 IMX415 驱动/IQ 文件，但摄像头尚未到手；仅有文件不能证明设备树绑定和真实出图成功。更换服务器不自动解决摄像头适配，摄像头固件步骤须在实物验收后补入本指南。
+2026-11-26，开发板现有 Buildroot Linux 5.10.160 已实际读到 IMX415 ID `0000e0`、绑定 MIPI/ISP 并输出真实彩色 RTSP。没有重新刷机。本次发现原厂启动入口未启动 rkipc，因此增加独立服务；其他系统镜像仍须按官方说明核对支持，不能只复制文件就声称适配完成。
+
+板子已使用本指南的 Linux 与音频客户端、ADB 已连接时执行：
+
+```powershell
+.\scripts\deploy-camera.ps1
+.\.tools\platform-tools\adb.exe shell '/etc/init.d/S97aiglass-camera status'
+```
+
+脚本从板载 `/oem/usr/share/rkipc-imx415-500w.ini` 生成独立的 `/userdata/aiglass/camera.ini`，保留原厂传感器、IQ、曝光和 IR-CUT 设置。视频设为 H.264、1280×720、15 fps、约 1.5 Mbps，关闭 rkipc 的音频、其他编码通道和录像，麦克风/喇叭继续由 Edith 音频客户端负责。后端从板子握手 IP 自动选择 `rtsp://板子IP/live/0`；实际处理预览缩放至不超过 960×960，原图和分割保持同帧。
+
+`S97aiglass-camera` 开机启动，并显式设置厂商库路径，避免启动阶段找不到 `librockit.so`。已验证重启后 RTSP 554 监听、音频和画面恢复。配置更新时若已有服务运行，安装脚本不会擅自杀掉其他 rkipc；确认是本项目实例后按需执行：
+
+```powershell
+.\.tools\platform-tools\adb.exe shell '/etc/init.d/S97aiglass-camera restart'
+.\.tools\platform-tools\adb.exe shell 'tail -n 60 /tmp/aiglass-camera.log'
+```
+
+停止视频用 `.../S97aiglass-camera stop`，音频服务独立运行。脚本仅会终止 PID、可执行文件和配置参数都匹配的本项目实例。部署前若已有 Edith 配置，会备份为 `camera.ini.bak`；要回退先停止视频，恢复该文件后再启动。原厂 INI 和 `/userdata/rkipc.ini` 不修改；如需禁用开机视频，可将 `/etc/init.d/S97aiglass-camera` 移出 init.d 并保存在 `/userdata/aiglass/`。
+
+网页可见时最多每秒轮询约 10 次，后台标签页降低频率；这不是模型处理帧率保证。开发机最终 60 秒采样为采集约 14.9 fps、处理约 4.3 fps、推理中位数 234 ms；浏览器 15 秒实际更新 59 帧，无脚本错误。没有测量镜头到显示器的完整延迟。
 
 按顺序验收并记录目标机器的代码提交、GPU、驱动和耗时：
 

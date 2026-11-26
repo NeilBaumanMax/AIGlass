@@ -68,13 +68,13 @@ function renderGuidance(guidance, disconnected=false) {
     return;
   }
   const names = {loading:'视觉加载中', waiting:'视觉未启用', confirming:'重新确认中', ready:'提醒已就绪', lost:'提醒已暂停', error:'提醒异常'};
-  const kinds = {stairs:'疑似台阶', obstacle:'前方障碍', stop:'通道不明确', unclear:'路面看不清', left:'通道偏左', right:'通道偏右', straight:'通道向前'};
+  const kinds = {stairs:'疑似台阶', obstacle:'前方障碍', obstacle_left:'前方障碍 · 左侧通道', obstacle_right:'前方障碍 · 右侧通道', stop:'尚无连续通道', unclear:'路面看不清', scan_left:'左侧局部路面 · 先观察', scan_right:'右侧局部路面 · 先观察', scan_ahead:'前方局部路面 · 先观察', left:'通道偏左', right:'通道偏右', straight:'通道向前'};
   const notes = {loading:'等待模型加载完成', waiting:'等待摄像头，不播报方向', confirming:'切换来源或模式后，重新确认画面', lost:'没有新鲜结果，已停止使用旧方向', error:'请检查视觉服务的错误信息'};
   const deferred = guidance.state === 'ready' && guidance.delivery === 'deferred';
   label('guidance-state', deferred ? '等待对话空闲' : names[guidance.state] || '等待状态', guidance.state === 'ready' ? 'good' : 'warning');
   label('guidance-current', guidance.state === 'ready' ? (guidance.confirmed ? '已确认 · ' + kinds[guidance.confirmed] : '多帧确认中') : notes[guidance.state] || '等待视觉结果');
   const failures = {audio_offline:'喇叭离线，提醒尚未送达', missing_audio:'本地提示音缺失，请重新生成', audio_error:'语音调度异常，请查看后端日志', playback_failed:'播放失败，等待重试'};
-  label('guidance-detail', failures[guidance.delivery] || (deferred ? '对话结束后重查画面，再决定播报' : guidance.delivery === 'priority_busy' ? '正在播放更高优先级提醒' : guidance.last_spoken ? '最近发出：' + guidance.last_spoken : '无需唤醒 · 本地语音提示'));
+  label('guidance-detail', failures[guidance.delivery] || (deferred ? '对话结束后重查画面，再决定播报' : guidance.delivery === 'priority_busy' ? '正在播放更高优先级提醒' : [guidance.reason, guidance.last_spoken ? '最近发出：' + guidance.last_spoken : '无需唤醒 · 本地语音提示'].filter(Boolean).join(' · ')));
 }
 function display(next) {
   state = next;
@@ -129,7 +129,13 @@ function display(next) {
 }
 async function refresh() {
   const generation = viewGeneration;
-  try { const response=await fetch('/api/status',{signal:AbortSignal.timeout(4000)});if(!response.ok)throw Error();const next=await response.json();if(generation===viewGeneration)display(next); }
+  const started = performance.now();
+  let interval = 500;
+  try { const response=await fetch('/api/status',{signal:AbortSignal.timeout(4000)});if(!response.ok)throw Error();const next=await response.json();if(generation===viewGeneration)display(next);
+    // One request at a time; render fresh matched frames up to 10 Hz. Idle or
+    // hidden pages keep the lower polling rate without accumulating requests.
+    if (next.video_online && !document.hidden) interval = 100;
+  }
   catch {
     label('connection','电脑后端离线','bad');label('board-state','状态未知','warning');label('board-detail','无法取得设备心跳');
     label('wake-state','状态未知');label('ai-state','连接中断');label('voice-title','连接中断');label('voice','正在等待电脑后端恢复');
@@ -138,7 +144,7 @@ async function refresh() {
     label('device-health','状态未知','warning');label('wake-detail','等待后端恢复');label('ai-detail','等待后端恢复');
     label('vision-detail','等待后端恢复');label('video-note','电脑后端连接中断，正在重连。');label('events-live','历史记录');
     renderGuidance(null, true);
-  } finally { setTimeout(refresh,500); }
+  } finally { setTimeout(refresh, Math.max(20, interval - (performance.now() - started))); }
 }
 el('clear-dialog').addEventListener('click',async()=>{
   const button=el('clear-dialog');button.disabled=true;
